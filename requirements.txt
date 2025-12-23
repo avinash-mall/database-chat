@@ -7,6 +7,9 @@ uvicorn[standard]>=0.32.0
 # Vanna AI Framework with required integrations
 vanna[fastapi,ollama,chromadb]>=0.8.0
 
+# OpenAI integration
+openai>=1.0.0
+
 # Oracle Database
 oracledb>=2.0.0
 

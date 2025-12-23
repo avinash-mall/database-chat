@@ -21,6 +21,14 @@ services:
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.7}
 
+      # OpenAI LLM Configuration (optional - if set, will be used instead of Ollama)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-${OPENAI_BASE_URL:-}}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
+      - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0.7}
+      - OPENAI_TIMEOUT=${OPENAI_TIMEOUT:-60.0}
+
       # ChromaDB Configuration
       - CHROMA_COLLECTION=${CHROMA_COLLECTION:-vanna_memory}
       - CHROMA_PERSIST_DIR=${CHROMA_PERSIST_DIR:-./chroma_db}
@@ -85,19 +93,6 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: vanna-frontend
-    ports:
-      - "3000:5173"
-    networks:
-      - vanna-network
-    depends_on:
-      - vanna-app
-    restart: unless-stopped
 
 networks:
   vanna-network:

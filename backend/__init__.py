@@ -30,7 +30,7 @@ For production deployments, consider:
     - Setting up proper CORS and security headers
 """
 
-from .config import config, AppConfig, OracleConfig, OllamaConfig, ChromaConfig, ServerConfig, LdapConfig
+from .config import config, AppConfig, OracleConfig, OllamaConfig, OpenAIConfig, ChromaConfig, ServerConfig, LdapConfig
 from .main import create_agent, main, LdapUserResolver
 
 __all__ = [
@@ -39,6 +39,7 @@ __all__ = [
     "AppConfig",
     "OracleConfig", 
     "OllamaConfig",
+    "OpenAIConfig",
     "ChromaConfig",
     "ServerConfig",
     "LdapConfig",

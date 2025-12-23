@@ -71,6 +71,35 @@ class OllamaConfig:
 
 
 @dataclass
+class OpenAIConfig:
+    """OpenAI LLM service configuration."""
+    api_key: Optional[str]
+    base_url: Optional[str]
+    model: str
+    temperature: float = 0.7
+    timeout: float = 60.0
+    
+    @classmethod
+    def from_env(cls) -> "OpenAIConfig":
+        """Load OpenAI configuration from environment variables."""
+        model = os.getenv("OPENAI_MODEL", "gpt-4")
+        # For gpt-oss-120b, use lower default temperature due to function calling issues
+        default_temp = "0.1" if "gpt-oss-120b" in model.lower() else "0.7"
+        return cls(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE"),
+            model=model,
+            temperature=float(os.getenv("OPENAI_TEMPERATURE", default_temp)),
+            timeout=float(os.getenv("OPENAI_TIMEOUT", "60.0")),
+        )
+    
+    @property
+    def is_configured(self) -> bool:
+        """Check if OpenAI is properly configured."""
+        return self.api_key is not None and self.api_key.strip() != ""
+
+
+@dataclass
 class ChromaConfig:
     """ChromaDB agent memory configuration."""
     collection_name: str
@@ -142,6 +171,7 @@ class AppConfig:
     """Complete application configuration."""
     oracle: OracleConfig
     ollama: OllamaConfig
+    openai: OpenAIConfig
     chroma: ChromaConfig
     server: ServerConfig
     ldap: LdapConfig
@@ -152,6 +182,7 @@ class AppConfig:
         return cls(
             oracle=OracleConfig.from_env(),
             ollama=OllamaConfig.from_env(),
+            openai=OpenAIConfig.from_env(),
             chroma=ChromaConfig.from_env(),
             server=ServerConfig.from_env(),
             ldap=LdapConfig.from_env(),
