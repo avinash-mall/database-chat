@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+dist/
+
+# Build outputs
+*.log
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment (contains secrets)
+# .env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Docker
+chroma_db/
+
+# Storybook
+storybook-static/

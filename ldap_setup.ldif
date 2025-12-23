@@ -1,0 +1,22 @@
+dn: ou=users,dc=vanna,dc=ai
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=vanna,dc=ai
+objectClass: organizationalUnit
+ou: groups
+
+dn: cn=admin,ou=groups,dc=vanna,dc=ai
+objectClass: groupOfNames
+cn: admin
+member: cn=avinash,ou=users,dc=vanna,dc=ai
+
+dn: cn=avinash,ou=users,dc=vanna,dc=ai
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: avinash
+sn: User
+uid: avinash
+userPassword: avinash123
+mail: avinash@vanna.ai
