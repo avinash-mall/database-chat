@@ -6,7 +6,10 @@ A natural language interface for querying Oracle databases using the Vanna AI fr
 
 - **Natural Language Queries**: Ask questions in plain English about your Oracle database
 - **LDAP Authentication**: Enterprise-ready authentication with LDAP integration
-- **Role-Based Access Control**: Admin and user groups with different permissions
+- **Role-Based Access Control**: Admin, superuser, and normaluser groups with different permissions
+- **Row-Level Security (RLS)**: Automatic data filtering for NORMALUSER based on AI_USERS identity columns
+- **User Context Awareness**: LLM automatically knows who you are - no need to identify yourself
+- **User Data Discovery**: Automatic discovery of tables containing your identity data
 - **Multiple LLM Support**: Choose between Ollama (local) or OpenAI (cloud) for inference
 - **Persistent Memory**: ChromaDB-based agent memory for context retention
 - **Modern Web UI**: Custom-built chat interface with authentication
@@ -117,24 +120,70 @@ docker cp ldap_setup.ldif ldap:/tmp/ldap_setup.ldif
 docker exec ldap ldapadd -x -H ldap://localhost -D "cn=admin,dc=vanna,dc=ai" -w Vanna123 -f /tmp/ldap_setup.ldif
 ```
 
-### User Groups
+### User Groups and Roles
 
-Users can be added to groups for access control:
+User roles are determined by the `AI_USERS` table in the Oracle database:
 
-- **admin** - Full access to all tools including training/saving SQL queries
-- **user** - Can query data but cannot save training examples
+| Role | `IS_ADMIN` | `IS_SUPERUSER` | `IS_NORMALUSER` | Access Level |
+|------|------------|----------------|-----------------|---------------|
+| **admin** | 1 | 0 | 0 | Full access, no RLS filtering |
+| **superuser** | 0 | 1 | 0 | Full access, no RLS filtering |
+| **normaluser** | 0 | 0 | 1 | Row-level security applied |
 
-Add users to the admin group in `ldap_setup.ldif`:
+### AI_USERS Table
 
-```ldif
-dn: cn=admin,ou=groups,dc=vanna,dc=ai
-objectClass: groupOfNames
-cn: admin
-member: cn=avinash,ou=users,dc=vanna,dc=ai
-member: cn=newuser,ou=users,dc=vanna,dc=ai
+Create the AI_USERS table in your Oracle database:
+
+```sql
+CREATE TABLE AI_USERS (
+    USERNAME VARCHAR2(50) PRIMARY KEY,
+    IS_ADMIN NUMBER DEFAULT 0 NOT NULL,
+    IS_SUPERUSER NUMBER DEFAULT 0 NOT NULL,
+    IS_NORMALUSER NUMBER DEFAULT 1 NOT NULL,
+    -- Add identity columns for RLS filtering
+    EMPLOYEE_ID NUMBER,
+    EMAIL VARCHAR2(255),
+    PERSON_ID VARCHAR2(50)
+);
+
+-- Example users
+INSERT INTO AI_USERS (USERNAME, IS_ADMIN) VALUES ('avinash', 1);
+INSERT INTO AI_USERS (USERNAME, IS_SUPERUSER) VALUES ('testuser', 1);
+INSERT INTO AI_USERS (USERNAME, IS_NORMALUSER, EMPLOYEE_ID, EMAIL) 
+    VALUES ('sarah', 1, 189, 'sarah@example.com');
 ```
 
-## Configuration
+## Row-Level Security (RLS)
+
+### How It Works
+
+Row-Level Security automatically filters query results for NORMALUSER based on their identity columns in AI_USERS:
+
+1. **Dynamic Column Discovery**: The system reads AI_USERS table schema to find identity columns (any column except USERNAME, IS_ADMIN, IS_SUPERUSER, IS_NORMALUSER)
+2. **Automatic Filtering**: When a NORMALUSER runs a query, WHERE clauses are injected to filter by matching columns
+3. **Table Discovery**: The `discover_my_tables` tool finds tables containing user identity columns
+4. **User Context**: The LLM knows who the user is and can query "my data" without asking for ID
+
+### Example
+
+If Sarah (EMPLOYEE_ID=189) queries the EMPLOYEES table:
+
+```sql
+-- Original query from LLM
+SELECT * FROM EMPLOYEES
+
+-- Automatically modified to:
+SELECT * FROM EMPLOYEES WHERE (EMPLOYEES.EMPLOYEE_ID = :rls_param_0)
+-- :rls_param_0 = 189
+```
+
+### RLS Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RLS_ENABLED` | `true` | Enable/disable RLS filtering |
+| `RLS_CACHE_TTL` | `300.0` | Cache TTL in seconds |
+| `RLS_EXCLUDED_TABLES` | `""` | Comma-separated list of tables to exclude from RLS |
 
 ### Required Environment Variables
 
@@ -349,24 +398,27 @@ Note: For local development, you'll still need:
 database-chat/
 ├── backend/
 │   ├── __init__.py
-│   ├── main.py         # Flask server, LDAP auth, and agent setup
-│   ├── config.py       # Configuration management from environment
-│   └── templates.py    # Custom login page HTML template
-├── assets/             # Frontend assets
-│   ├── base.html       # Base HTML template
-│   ├── css/            # Stylesheets
-│   ├── js/             # JavaScript files (auth, chat, components)
-│   └── fonts/          # Custom fonts
+│   ├── main.py                   # Flask server, LDAP auth, and agent setup
+│   ├── config.py                 # Configuration management from environment
+│   ├── templates.py              # Custom login page HTML template
+│   ├── rls_service.py            # Row-Level Security service
+│   ├── secure_sql_tool.py        # RLS-aware SQL execution tool
+│   ├── discover_tables_tool.py   # User data discovery tool
+│   └── system_prompt_builder.py  # User-aware system prompts
+├── assets/                       # Frontend assets
+│   ├── base.html                 # Base HTML template
+│   ├── css/                      # Stylesheets
+│   ├── js/                       # JavaScript files (auth, chat, components)
+│   └── fonts/                    # Custom fonts
 ├── scripts/
-│   ├── setup_ldap.sh   # LDAP setup script (Linux/Mac)
-│   └── setup_ldap.ps1  # LDAP setup script (Windows)
-├── chroma_db/          # ChromaDB persistence directory (created at runtime)
-├── ldap_setup.ldif     # LDAP user and group definitions
-├── docker-compose.yml  # Container orchestration
-├── Dockerfile          # App container build definition
-├── requirements.txt    # Python dependencies
-├── .env.example        # Environment variables template
-└── README.md           # This file
+│   ├── setup_ldap.sh             # LDAP setup script (Linux/Mac)
+│   └── setup_ldap.ps1            # LDAP setup script (Windows)
+├── chroma_db/                    # ChromaDB persistence directory (created at runtime)
+├── ldap_setup.ldif               # LDAP user and group definitions
+├── docker-compose.yml            # Container orchestration
+├── Dockerfile                    # App container build definition
+├── requirements.txt              # Python dependencies
+└── README.md                     # This file
 ```
 
 ### Key Components
@@ -415,42 +467,37 @@ docker-compose down -v
 
 The Vanna Agent provides several tools based on user permissions:
 
-**All Users:**
+**All Users (admin, superuser, normaluser):**
 
-- `RunSqlTool` - Execute SQL queries on Oracle database
-- `SearchSavedCorrectToolUsesTool` - Search past successful queries
-- `SaveTextMemoryTool` - Save text-based memories
-- `VisualizeDataTool` - Create visualizations from query results
+- `run_sql` - Execute SQL queries on Oracle database (RLS applied for normaluser)
+- `discover_my_tables` - Discover tables containing user identity columns
+- `search_saved_correct_tool_uses` - Search past successful queries
+- `save_text_memory` - Save text-based memories
+- `visualize_data` - Create visualizations from query results
 
-**Admin Users Only:**
+**Admin and Superuser Only:**
 
-- `SaveQuestionToolArgsTool` - Save training examples for query improvement
+- `save_question_tool_args` - Save training examples for query improvement
+
+### User Context in LLM
+
+The LLM automatically knows:
+- User's username, email, and groups
+- User's identity column values (EMPLOYEE_ID, EMAIL, etc.)
+- Access level (full access or RLS-restricted)
+
+This allows natural queries like "show me my employee details" without needing to specify user ID.
 
 ## Security Considerations
 
+- **Row-Level Security**: NORMALUSER can only see data matching their identity columns
+- **SQL Injection Prevention**: RLS filters use parameterized queries
 - **LDAP Passwords**: Store LDAP passwords securely and never commit `.env` files
 - **Oracle Credentials**: Use strong passwords and consider using Oracle wallet for credential management
 - **API Keys**: Keep OpenAI API keys secure and rotate them regularly
 - **Network**: In production, use SSL/TLS for LDAP (`LDAP_USE_SSL=true`)
-- **Access Control**: Regularly review LDAP group memberships and user permissions
+- **Access Control**: Regularly review AI_USERS table and LDAP group memberships
 
 ## License
 
-CREATE TABLE "HR"."AI_USERS"
-   (	"USERNAME" VARCHAR2(50 BYTE) NOT NULL ENABLE,
-	"IS_ADMIN" NUMBER DEFAULT 0 NOT NULL ENABLE,
-	"IS_SUPERUSER" NUMBER DEFAULT 0 NOT NULL ENABLE,
-	"IS_NORMALUSER" NUMBER DEFAULT 1 NOT NULL ENABLE,
-	 CONSTRAINT "AI_USERS_PK" PRIMARY KEY ("USERNAME")
-  USING INDEX PCTFREE 10 INITRANS 2 MAXTRANS 255
-  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645
-  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1
-  BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)
-  TABLESPACE "USERS"  ENABLE
-   ) SEGMENT CREATION IMMEDIATE
-  PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255
- NOCOMPRESS LOGGING
-  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645
-  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1
-  BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)
-  TABLESPACE "USERS" ;
+MIT License

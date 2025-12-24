@@ -357,6 +357,11 @@ class RowLevelSecurityService:
             logger.debug("RLS: No filter values for user, returning original query")
             return sql, {}
         
+        # Strip trailing semicolons (Oracle doesn't want them in programmatic execution)
+        sql = sql.strip()
+        if sql.endswith(';'):
+            sql = sql[:-1].strip()
+        
         # Parse the SQL
         parsed = sqlparse.parse(sql)
         if not parsed:

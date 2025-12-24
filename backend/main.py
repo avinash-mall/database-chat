@@ -50,6 +50,7 @@ from .config import config
 from .rls_service import RowLevelSecurityService, RLSConfig
 from .secure_sql_tool import SecureRunSqlTool
 from .system_prompt_builder import UserAwareSystemPromptBuilder
+from .discover_tables_tool import DiscoverUserTablesTool
 
 
 # =============================================================================
@@ -478,6 +479,10 @@ def create_agent() -> Agent:
     # Roles from AI_USERS table: admin, superuser, user
     tools = ToolRegistry()
     tools.register_local_tool(db_tool, access_groups=['admin', 'superuser', 'user'])
+    tools.register_local_tool(
+        DiscoverUserTablesTool(rls_service=rls_service, oracle_config=config.oracle),
+        access_groups=['admin', 'superuser', 'user']
+    )
     tools.register_local_tool(SaveQuestionToolArgsTool(), access_groups=['admin', 'superuser'])
     tools.register_local_tool(SearchSavedCorrectToolUsesTool(), access_groups=['admin', 'superuser', 'user'])
     tools.register_local_tool(SaveTextMemoryTool(), access_groups=['admin', 'superuser', 'user'])

@@ -150,7 +150,7 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
                 raise RuntimeError(f"Database error: {e}")
         else:
             # No bind params, use the standard runner
-            return self.sql_runner.run(sql)
+            return self.sql_runner.run_sql(sql)
     
     async def execute(self, context: ToolContext, args: SecureSqlArgs) -> ToolResult:
         """
@@ -212,7 +212,6 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
             return ToolResult(
                 success=True,
                 result_for_llm=result_text,
-                ui_component=DataFrameComponent(data=result_df) if row_count > 0 else None,
                 metadata={
                     "row_count": row_count,
                     "rls_applied": not self._is_privileged_user(user),
