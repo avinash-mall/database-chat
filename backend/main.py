@@ -19,7 +19,7 @@ Environment Variables (optional):
     You can also create a .env file in the project root.
 """
 
-from vanna import Agent
+from vanna import Agent, AgentConfig
 from vanna.core.registry import ToolRegistry
 from vanna.core.user import UserResolver, User, RequestContext
 from vanna.tools import RunSqlTool, VisualizeDataTool
@@ -431,12 +431,18 @@ def create_agent() -> Agent:
     tools.register_local_tool(SaveTextMemoryTool(), access_groups=['admin', 'user'])
     tools.register_local_tool(VisualizeDataTool(), access_groups=['admin', 'user'])
     
+    # Create agent configuration
+    agent_config = AgentConfig(
+        max_tool_iterations=config.agent.max_tool_iterations
+    )
+    
     # Create and return the agent
     agent = Agent(
         llm_service=llm,
         tool_registry=tools,
         user_resolver=user_resolver,
-        agent_memory=agent_memory
+        agent_memory=agent_memory,
+        config=agent_config
     )
     
     return agent

@@ -302,6 +302,19 @@ class UIConfig:
 
 
 @dataclass
+class AgentConfig:
+    """Agent configuration."""
+    max_tool_iterations: int = 10
+    
+    @classmethod
+    def from_env(cls) -> "AgentConfig":
+        """Load agent configuration from environment variables."""
+        return cls(
+            max_tool_iterations=int(_get_env("VANNA_MAX_TOOL_ITERATIONS", "10")),
+        )
+
+
+@dataclass
 class AppConfig:
     """Complete application configuration."""
     oracle: OracleConfig
@@ -311,6 +324,7 @@ class AppConfig:
     server: ServerConfig
     ldap: LdapConfig
     ui: UIConfig
+    agent: AgentConfig
     
     @classmethod
     def from_env(cls) -> "AppConfig":
@@ -323,6 +337,7 @@ class AppConfig:
             server=ServerConfig.from_env(),
             ldap=LdapConfig.from_env(),
             ui=UIConfig.from_env(),
+            agent=AgentConfig.from_env(),
         )
     
     @property
