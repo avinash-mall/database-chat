@@ -56,11 +56,36 @@ class VannaFlaskServer(BaseVannaFlaskServer):
     
     def create_app(self) -> Flask:
         """Create configured Flask app with LDAP login."""
-        dev_mode = self.config.get("dev_mode", False)
-        static_folder = self.config.get("static_folder", "static") if dev_mode else None
-        
-        app = Flask(__name__, static_folder=static_folder, static_url_path="/static")
+        app = Flask(__name__, static_url_path="/static")
         app.config.update(self.config.get("flask", {}))
+        
+        # Serve assets folder as static files
+        import os
+        from pathlib import Path
+        assets_path = Path(__file__).parent.parent / "assets"
+        if assets_path.exists():
+            from flask import send_from_directory, abort
+            @app.route("/assets/<path:filepath>")
+            def assets(filepath):
+                """Serve files from the assets directory."""
+                # Normalize path separators
+                filepath = filepath.replace('\\', '/')
+                # Build the full path
+                full_path = assets_path / filepath
+                # Resolve to absolute path to prevent directory traversal
+                try:
+                    full_path = full_path.resolve()
+                    assets_path_resolved = assets_path.resolve()
+                    # Ensure the file is within the assets directory
+                    if not str(full_path).startswith(str(assets_path_resolved)):
+                        abort(404)
+                    if full_path.exists() and full_path.is_file():
+                        directory = str(full_path.parent)
+                        filename = full_path.name
+                        return send_from_directory(directory, filename)
+                except (ValueError, OSError):
+                    pass
+                abort(404)
         
         # Enable CORS
         cors_config = self.config.get("cors", {})
@@ -72,12 +97,13 @@ class VannaFlaskServer(BaseVannaFlaskServer):
         
         # Define custom LDAP login view function
         def custom_index() -> str:
-            cdn_url = self.config.get("cdn_url", "https://img.vanna.ai/vanna-components.js")
             api_base_url = self.config.get("api_base_url", "")
+            show_api_endpoints = config.ui.show_api_endpoints
+            ui_text = config.ui.text
             return get_ldap_login_html(
-                dev_mode=dev_mode,
-                cdn_url=cdn_url,
-                api_base_url=api_base_url
+                api_base_url=api_base_url,
+                show_api_endpoints=show_api_endpoints,
+                ui_text=ui_text
             )
         
         # Override the default index view function with our custom one
@@ -107,7 +133,7 @@ class VannaFlaskServer(BaseVannaFlaskServer):
                 
                 # Check if user is guest (auth failed)
                 if user.id == config.ldap.guest_username:
-                    return jsonify({"error": "Invalid credentials"}), 401
+                    return jsonify({"error": "Invalid username or password. Please check your credentials and try again."}), 401
                 
                 return jsonify({
                     "success": True,
@@ -115,8 +141,16 @@ class VannaFlaskServer(BaseVannaFlaskServer):
                     "email": user.email,
                     "groups": user.group_memberships
                 })
+            except LDAPException as e:
+                # LDAP-specific errors
+                error_msg = f"LDAP authentication error: {str(e)}"
+                print(f"LDAP error in auth_test: {error_msg}")
+                return jsonify({"error": "Unable to connect to authentication server. Please try again later."}), 401
             except Exception as e:
-                return jsonify({"error": str(e)}), 401
+                # Other errors
+                error_msg = str(e)
+                print(f"Error in auth_test: {error_msg}")
+                return jsonify({"error": f"Authentication failed: {error_msg}"}), 401
             finally:
                 loop.close()
         
@@ -261,8 +295,14 @@ class LdapUserResolver(UserResolver):
 def create_agent() -> Agent:
     """Create and configure the Vanna Agent with Oracle database connection."""
     
-    # Configure the LLM service (OpenAI or Ollama)
-    if config.openai.is_configured:
+    # Configure the LLM service (OpenAI or Ollama) based on INFERENCE_PROVIDER
+    if config.inference_provider == "openai":
+        if not config.openai.is_configured:
+            raise ValueError(
+                "INFERENCE_PROVIDER is set to 'openai' but OpenAI is not properly configured. "
+                "Please set OPENAI_API_KEY and OPENAI_MODEL in your environment variables."
+            )
+        
         llm_kwargs = {
             "api_key": config.openai.api_key,
             "model": config.openai.model,
@@ -270,8 +310,18 @@ def create_agent() -> Agent:
         if config.openai.base_url:
             llm_kwargs["base_url"] = config.openai.base_url
         
+        if config.openai.timeout:
+            llm_kwargs["timeout"] = config.openai.timeout
+        
         llm = OpenAILlmService(**llm_kwargs)
     else:
+        # Default to Ollama
+        if not config.ollama.is_configured:
+            raise ValueError(
+                "INFERENCE_PROVIDER is set to 'ollama' but Ollama is not properly configured. "
+                "Please set OLLAMA_MODEL and OLLAMA_HOST in your environment variables."
+            )
+        
         llm = OllamaLlmService(
             model=config.ollama.model,
             host=config.ollama.host,
@@ -325,9 +375,10 @@ def main():
     print("=" * 60)
     print(f"\nConfiguration:")
     print(f"  Oracle Database: {config.oracle.user}@{config.oracle.dsn}")
-    if config.openai.is_configured:
+    if config.inference_provider == "openai":
         base_url_info = f" at {config.openai.base_url}" if config.openai.base_url else " (default OpenAI API)"
-        print(f"  LLM Service: OpenAI ({config.openai.model}){base_url_info}")
+        temp_info = f", temperature={config.openai.temperature}" if config.openai.temperature is not None else ""
+        print(f"  LLM Service: OpenAI ({config.openai.model}){base_url_info}{temp_info}")
     else:
         print(f"  LLM Service: Ollama ({config.ollama.model}) at {config.ollama.host}")
     print(f"  Agent Memory: ChromaDB ({config.chroma.collection_name})")

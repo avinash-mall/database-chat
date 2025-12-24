@@ -21,6 +21,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend application code
 COPY backend/ ./backend/
 
+# Copy assets folder (templates, CSS, JS, fonts)
+COPY assets/ ./assets/
+
 # Create directory for ChromaDB persistence
 RUN mkdir -p /app/chroma_db
 

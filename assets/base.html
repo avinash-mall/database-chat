@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{PAGE_TITLE}}</title>
+    <link href="/assets/css/google-fonts.css" rel="stylesheet">
+    <script src="/assets/js/tailwindcss.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'vanna-navy': '#023d60',
+                        'vanna-cream': '#e7e1cf',
+                        'vanna-teal': '#15a8a8',
+                        'vanna-orange': '#fe5d26',
+                        'vanna-magenta': '#bf1363',
+                    },
+                    fontFamily: {
+                        'sans': ['Space Grotesk', 'ui-sans-serif', 'system-ui'],
+                        'serif': ['Roboto Slab', 'ui-serif', 'Georgia'],
+                        'mono': ['Space Mono', 'ui-monospace', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        {{STYLES}}
+    </style>
+    {{COMPONENT_SCRIPT}}
+</head>
+<body>
+    <div class="max-w-6xl mx-auto p-5">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-vanna-navy mb-2 font-serif">{{HEADER_TITLE}}</h1>
+            <p class="text-lg font-mono font-bold text-vanna-teal mb-4">{{HEADER_SUBTITLE}}</p>
+            <p class="text-slate-600 mb-4">{{HEADER_DESCRIPTION}}</p>
+        </div>
+
+        {{DEV_MODE_MESSAGE}}
+
+        <!-- LDAP Login Form -->
+        <div id="loginContainer" class="max-w-md mx-auto mb-10 bg-white p-8 rounded-xl shadow-lg border border-vanna-teal/30">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-semibold text-vanna-navy mb-2 font-serif">{{LOGIN_TITLE}}</h2>
+                <p class="text-sm text-slate-600">{{LOGIN_DESCRIPTION}}</p>
+            </div>
+
+            <div id="loginError" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <strong>{{LOGIN_FAILED_LABEL}}</strong> <span id="errorMessage"></span>
+            </div>
+
+            <form id="loginForm">
+                <div class="mb-4">
+                    <label for="usernameInput" class="block mb-2 text-sm font-medium text-vanna-navy">{{USERNAME_LABEL}}</label>
+                    <input
+                        type="text"
+                        id="usernameInput"
+                        placeholder="{{USERNAME_PLACEHOLDER}}"
+                        autocomplete="username"
+                        class="w-full px-4 py-3 text-sm border border-vanna-teal/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-vanna-teal focus:border-transparent bg-white"
+                        required
+                    />
+                </div>
+
+                <div class="mb-5">
+                    <label for="passwordInput" class="block mb-2 text-sm font-medium text-vanna-navy">{{PASSWORD_LABEL}}</label>
+                    <input
+                        type="password"
+                        id="passwordInput"
+                        placeholder="{{PASSWORD_PLACEHOLDER}}"
+                        autocomplete="current-password"
+                        class="w-full px-4 py-3 text-sm border border-vanna-teal/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-vanna-teal focus:border-transparent bg-white"
+                        required
+                    />
+                </div>
+
+                <button type="submit" id="loginButton" class="w-full px-4 py-3 bg-vanna-teal text-white text-sm font-medium rounded-lg hover:bg-vanna-navy focus:outline-none focus:ring-2 focus:ring-vanna-teal focus:ring-offset-2 transition disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <span id="loginButtonText">{{LOGIN_BUTTON}}</span>
+                </button>
+            </form>
+
+            <div class="mt-5 p-3 bg-vanna-teal/10 border-l-4 border-vanna-teal rounded text-xs text-vanna-navy leading-relaxed">
+                {{LDAP_AUTH_NOTE}}
+            </div>
+        </div>
+
+        <!-- Logged In Status (hidden by default) -->
+        <div id="loggedInStatus" class="hidden text-center p-4 bg-vanna-teal/10 border border-vanna-teal/30 rounded-lg mb-5">
+            {{LOGGED_IN_PREFIX}} <span id="loggedInUser" class="font-semibold text-vanna-navy"></span>
+            <br>
+            <button id="logoutButton" class="mt-2 px-3 py-1.5 bg-vanna-navy text-white text-xs rounded hover:bg-vanna-teal transition">
+                {{LOGOUT_BUTTON}}
+            </button>
+        </div>
+
+        <!-- Chat Container (hidden by default) -->
+        <div id="chatSections" class="hidden">
+            <div class="bg-white rounded-xl shadow-lg h-[600px] overflow-hidden">
+                <vanna-chat
+                    title="{{CHAT_TITLE}}"
+                    api-base="{{API_BASE_URL}}"
+                    sse-endpoint="/api/vanna/v2/chat_sse"
+                    ws-endpoint="/api/vanna/v2/chat_websocket"
+                    poll-endpoint="/api/vanna/v2/chat_poll"
+                    style="width: 100%; height: 100%; display: block;">
+                </vanna-chat>
+            </div>
+
+            {{API_ENDPOINTS_SECTION}}
+        </div>
+    </div>
+
+    <script>
+        {{AUTH_JS}}
+    </script>
+
+    <script>
+        {{CHAT_JS}}
+    </script>
+</body>
+</html>
+
