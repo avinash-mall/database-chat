@@ -139,7 +139,8 @@ class VannaFlaskServer(BaseVannaFlaskServer):
                     "success": True,
                     "user": user.id,
                     "email": user.email,
-                    "groups": user.group_memberships
+                    "groups": user.group_memberships,
+                    "is_admin": 'admin' in user.group_memberships
                 })
             except LDAPException as e:
                 # LDAP-specific errors
@@ -150,6 +151,8 @@ class VannaFlaskServer(BaseVannaFlaskServer):
                 # Other errors
                 error_msg = str(e)
                 print(f"Error in auth_test: {error_msg}")
+                import traceback
+                traceback.print_exc()
                 return jsonify({"error": f"Authentication failed: {error_msg}"}), 401
             finally:
                 loop.close()
@@ -194,17 +197,48 @@ class LdapUserResolver(UserResolver):
     def _get_user_groups(self, conn: Connection, user_dn: str) -> list[str]:
         """Get groups the user belongs to."""
         groups = []
+        
+        # Use bind DN connection for group searches (user may not have read access to groups)
+        search_conn = None
         try:
-            conn.search(
-                search_base=self.config.base_dn,
-                search_filter=f"(&(objectClass=groupOfNames)(member={user_dn}))",
-                search_scope=SUBTREE,
-                attributes=['cn']
-            )
-            for entry in conn.entries:
-                groups.append(str(entry.cn))
-        except LDAPException:
-            pass
+            # Create a new connection using bind DN for searching groups
+            search_conn = Connection(self.server, user=self.config.bind_dn, password=self.config.bind_password, auto_bind=True)
+        except LDAPException as e:
+            # Fallback to user connection if bind DN fails
+            search_conn = conn
+        
+        try:
+            # Try searching for groups where user is a member
+            # Use exact match first (most common)
+            search_filters = [
+                f"(&(objectClass=groupOfNames)(member={user_dn}))",
+                f"(&(objectClass=groupOfUniqueNames)(uniqueMember={user_dn}))",
+                f"(&(objectClass=posixGroup)(memberUid={user_dn.split(',')[0].split('=')[1]}))",
+            ]
+            
+            for search_filter in search_filters:
+                try:
+                    search_conn.search(
+                        search_base=self.config.base_dn,
+                        search_filter=search_filter,
+                        search_scope=SUBTREE,
+                        attributes=['cn']
+                    )
+                    for entry in search_conn.entries:
+                        group_name = str(entry.cn).strip()
+                        if group_name and group_name not in groups:
+                            groups.append(group_name)
+                except LDAPException:
+                    continue
+        except LDAPException as e:
+            print(f"LDAP: Error searching for groups for {user_dn}: {e}")
+        finally:
+            # Close the search connection if we created it
+            if search_conn and search_conn != conn:
+                try:
+                    search_conn.unbind()
+                except:
+                    pass
         return groups
     
     def _authenticate_user(self, username: str, password: str) -> tuple[bool, dict]:
@@ -255,8 +289,12 @@ class LdapUserResolver(UserResolver):
                 authenticated, user_info = self._authenticate_user(username, password)
                 
                 if authenticated:
+                    # Get groups from LDAP (normalize to lowercase for comparison)
+                    ldap_groups = [g.lower().strip() for g in user_info.get('groups', [])]
+                    
                     groups = ['user']
-                    if 'admin' in user_info.get('groups', []):
+                    # Case-insensitive check for admin group
+                    if 'admin' in ldap_groups:
                         groups = ['admin', 'user']
                     
                     return User(
@@ -269,10 +307,46 @@ class LdapUserResolver(UserResolver):
                 print(f"Error processing auth header: {e}")
         
         session_user = request_context.get_cookie('vanna_user')
-        session_groups = request_context.get_cookie('vanna_groups')
+        session_auth = request_context.get_cookie('vanna_auth')
         
+        if session_user and session_auth:
+            # If we have session cookies, try to re-authenticate with LDAP
+            # to get fresh group information (in case groups changed or cookie is stale)
+            try:
+                credentials = base64.b64decode(session_auth).decode('utf-8')
+                username, password = credentials.split(':', 1)
+                
+                # Only re-authenticate if username matches
+                if username == session_user:
+                    authenticated, user_info = self._authenticate_user(username, password)
+                    
+                    if authenticated:
+                        # Get groups from LDAP (normalize to lowercase for comparison)
+                        ldap_groups = [g.lower().strip() for g in user_info.get('groups', [])]
+                        
+                        groups = ['user']
+                        # Case-insensitive check for admin group
+                        if 'admin' in ldap_groups:
+                            groups = ['admin', 'user']
+                        
+                        return User(
+                            id=username,
+                            email=user_info.get('email', f"{username}@{self.config.email_domain}"),
+                            username=username,
+                            group_memberships=groups
+                        )
+            except Exception as e:
+                print(f"LDAP: Error re-authenticating session user {session_user}: {e}")
+                # Fall through to cookie-based lookup
+        
+        # Fallback: use cookie groups if re-authentication failed
+        session_groups = request_context.get_cookie('vanna_groups')
         if session_user:
-            groups = session_groups.split(',') if session_groups else ['user']
+            # Parse groups from cookie (normalize and filter empty strings)
+            groups = [g.strip() for g in session_groups.split(',') if g.strip()] if session_groups else ['user']
+            # Ensure 'user' is always included
+            if 'user' not in groups:
+                groups.append('user')
             return User(
                 id=session_user,
                 email=f"{session_user}@{self.config.email_domain}",

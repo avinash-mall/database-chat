@@ -4,7 +4,8 @@
 flask>=3.0.0
 
 # Vanna AI Framework with required integrations
-vanna[flask,ollama,chromadb]>=0.8.0
+vanna[all]
+vanna[flask,ollama,chromadb]
 
 # OpenAI integration
 openai>=1.0.0

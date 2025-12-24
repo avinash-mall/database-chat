@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt ./
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Pre-download ChromaDB ONNX model to bake it into the image
 # Download the model directly from ChromaDB's S3 bucket and extract it
@@ -35,14 +35,9 @@ COPY assets/ ./assets/
 # Create directory for ChromaDB persistence
 RUN mkdir -p /app/chroma_db
 
-# Expose the port the app runs on
+# Expose the port the app runs on (default 8000, can be overridden via env at runtime)
 EXPOSE 8000
 
-# Set environment variables with defaults
-ENV VANNA_HOST=0.0.0.0
-ENV VANNA_PORT=8000
-ENV VANNA_LOG_LEVEL=info
-ENV FLASK_ENV=production
-
 # Run the application with Flask
+# Environment variables are loaded from .env via docker-compose or can be set at runtime
 CMD ["python", "-m", "backend.main"]

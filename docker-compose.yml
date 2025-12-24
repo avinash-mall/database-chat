@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: vanna-app
     ports:
-      - "${VANNA_PORT:-8000}:8000"
+      - "${VANNA_PORT:-8000}:${VANNA_PORT:-8000}"
     env_file:
       - .env
     volumes:
@@ -22,12 +22,14 @@ services:
     image: osixia/openldap:1.5.0
     container_name: ldap
     environment:
-      LDAP_ORGANISATION: "Vanna"
-      LDAP_DOMAIN: "vanna.ai"
-      LDAP_ADMIN_PASSWORD: "Vanna123"
+      LDAP_ORGANISATION: "${LDAP_ORGANISATION:-Vanna}"
+      LDAP_DOMAIN: "${LDAP_DOMAIN:-vanna.ai}"
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD:-Vanna123}"
     ports:
       - "${LDAP_PORT:-389}:389"
-      - "636:636"
+      - "${LDAP_SSL_PORT:-636}:636"
+    env_file:
+      - .env
     volumes:
       - ldap_data:/var/lib/ldap
       - ldap_config:/etc/ldap/slapd.d
