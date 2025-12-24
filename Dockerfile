@@ -31,6 +31,7 @@ EXPOSE 8000
 ENV VANNA_HOST=0.0.0.0
 ENV VANNA_PORT=8000
 ENV VANNA_LOG_LEVEL=info
+ENV FLASK_ENV=production
 
-# Run the application
+# Run the application with Flask
 CMD ["python", "-m", "backend.main"]

@@ -7,93 +7,41 @@ services:
       dockerfile: Dockerfile
     container_name: vanna-app
     ports:
-      - "8000:8000"
-    environment:
-      # Oracle Database Configuration
-      - ORACLE_USER=${ORACLE_USER:-hr}
-      - ORACLE_PASSWORD=${ORACLE_PASSWORD:-hr123}
-      - ORACLE_DSN=${ORACLE_DSN:-localhost:1521/FREEPDB1}
-
-      # Ollama LLM Configuration
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-gpt-oss:20b}
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://localhost:11434}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-240.0}
-      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
-      - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.7}
-
-      # OpenAI LLM Configuration (optional - if set, will be used instead of Ollama)
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
-      - OPENAI_API_BASE=${OPENAI_API_BASE:-${OPENAI_BASE_URL:-}}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
-      - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0.7}
-      - OPENAI_TIMEOUT=${OPENAI_TIMEOUT:-60.0}
-
-      # ChromaDB Configuration
-      - CHROMA_COLLECTION=${CHROMA_COLLECTION:-vanna_memory}
-      - CHROMA_PERSIST_DIR=${CHROMA_PERSIST_DIR:-./chroma_db}
-
-      # Server Configuration
-      - VANNA_HOST=${VANNA_HOST:-0.0.0.0}
-      - VANNA_PORT=${VANNA_PORT:-8000}
-      - VANNA_LOG_LEVEL=${VANNA_LOG_LEVEL:-info}
-
-      # LDAP Authentication Configuration
-      - LDAP_HOST=${LDAP_HOST:-ldap}
-      - LDAP_PORT=${LDAP_PORT:-389}
-      - LDAP_BASE_DN=${LDAP_BASE_DN:-dc=vanna,dc=ai}
-      - LDAP_USER_DN_TEMPLATE=${LDAP_USER_DN_TEMPLATE:-cn={username},ou=users,dc=vanna,dc=ai}
-      - LDAP_ADMIN_GROUP_DN=${LDAP_ADMIN_GROUP_DN:-cn=admin,ou=groups,dc=vanna,dc=ai}
-      - LDAP_BIND_DN=${LDAP_BIND_DN:-cn=admin,dc=vanna,dc=ai}
-      - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD:-Vanna123}
-      - LDAP_USE_SSL=${LDAP_USE_SSL:-false}
+      - "${VANNA_PORT:-8000}:8000"
+    env_file:
+      - .env
     volumes:
-      # Persist ChromaDB data
-      - ./chroma_db:/app/chroma_db
+      - chroma_data:/app/chroma_db
     networks:
       - vanna-network
-    # Uncomment if you need to connect to services on host machine
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     depends_on:
-      - vanna-chroma-db
       - ldap
-
-  vanna-chroma-db:
-    image: chromadb/chroma:latest
-    container_name: vanna-chroma-db
-    ports:
-      - "8001:8000"
-    environment:
-      - CHROMA_DB_HOST=localhost
-      - CHROMA_DB_PORT=8000
-      - CHROMA_DB_NAME=vanna_memory
-    networks:
-      - vanna-network
-    restart: unless-stopped
-    volumes:
-      - ./chroma_db:/app/chroma_db
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   ldap:
     image: osixia/openldap:1.5.0
     container_name: ldap
     environment:
-      - LDAP_ORGANISATION=${LDAP_ORGANISATION:-Vanna}
-      - LDAP_DOMAIN=${LDAP_DOMAIN:-vanna.ai}
-      - LDAP_BASE_DN=${LDAP_BASE_DN:-dc=vanna,dc=ai}
-      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD:-Vanna123}
+      LDAP_ORGANISATION: "Vanna"
+      LDAP_DOMAIN: "vanna.ai"
+      LDAP_ADMIN_PASSWORD: "Vanna123"
     ports:
-      - 389:389
-      - 636:636
+      - "${LDAP_PORT:-389}:389"
+      - "636:636"
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
     networks:
       - vanna-network
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
 networks:
   vanna-network:
     driver: bridge
+
+volumes:
+  chroma_data:
+  ldap_data:
+  ldap_config:
