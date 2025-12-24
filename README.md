@@ -1,6 +1,16 @@
 # Vanna Oracle Database Chat
 
-A natural language interface for querying Oracle databases using the Vanna AI framework with LDAP authentication.
+A natural language interface for querying Oracle databases using the Vanna AI framework with LDAP authentication. This application provides an interactive chat interface where users can query Oracle databases using plain English, powered by AI agents that understand database schemas and generate SQL queries.
+
+## Features
+
+- **Natural Language Queries**: Ask questions in plain English about your Oracle database
+- **LDAP Authentication**: Enterprise-ready authentication with LDAP integration
+- **Role-Based Access Control**: Admin and user groups with different permissions
+- **Multiple LLM Support**: Choose between Ollama (local) or OpenAI (cloud) for inference
+- **Persistent Memory**: ChromaDB-based agent memory for context retention
+- **Modern Web UI**: Custom-built chat interface with authentication
+- **Docker Support**: Containerized deployment with Docker Compose
 
 ## Quick Start
 
@@ -10,16 +20,18 @@ A natural language interface for querying Oracle databases using the Vanna AI fr
 # Copy environment template
 cp .env.example .env
 
-# Edit .env with your Oracle database credentials
+# Edit .env with your Oracle database credentials and other settings
+# See Configuration section below for all required variables
 ```
 
 ### 2. Start the Services
 
 ```bash
-# Start all containers
+# Start all containers (app and LDAP server)
 docker-compose up -d
 
 # Wait for services to be ready (30-60 seconds)
+# Check logs if needed: docker-compose logs -f
 ```
 
 ### 3. Initialize LDAP Users
@@ -27,11 +39,13 @@ docker-compose up -d
 After the containers are running, set up the LDAP users:
 
 **Windows (PowerShell):**
+
 ```powershell
 .\scripts\setup_ldap.ps1
 ```
 
 **Linux/Mac:**
+
 ```bash
 chmod +x scripts/setup_ldap.sh
 ./scripts/setup_ldap.sh
@@ -40,6 +54,7 @@ chmod +x scripts/setup_ldap.sh
 ### 4. Access the Application
 
 Open http://localhost:8000 in your browser and log in with:
+
 - **Username:** `avinash`
 - **Password:** `avinash123`
 
@@ -56,12 +71,16 @@ Open http://localhost:8000 in your browser and log in with:
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
 │  │ LDAP Auth   │  │ Chat API    │  │ Agent (LLM + Tools) │ │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+│                                                               │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │              ChromaDB Agent Memory                     │  │
+│  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
          │                                    │
          ▼                                    ▼
 ┌─────────────────┐                ┌─────────────────────────┐
 │ LDAP Server     │                │ Oracle Database         │
-│ (Port 389)      │                │ (External)              │
+│ (Port 389)      │                │ (External/Configurable) │
 └─────────────────┘                └─────────────────────────┘
 ```
 
@@ -72,7 +91,8 @@ Open http://localhost:8000 in your browser and log in with:
 1. User enters username/password on the login page
 2. Frontend sends Basic Auth header to `/api/vanna/v2/auth_test`
 3. Backend validates credentials against LDAP server
-4. On success, cookies are set and user can access the chat
+4. User groups are retrieved from LDAP for role-based access control
+5. On success, cookies are set and user can access the chat
 
 ### Adding New Users
 
@@ -100,7 +120,8 @@ docker exec ldap ldapadd -x -H ldap://localhost -D "cn=admin,dc=vanna,dc=ai" -w 
 ### User Groups
 
 Users can be added to groups for access control:
-- **admin** - Full access to all tools including training/saving
+
+- **admin** - Full access to all tools including training/saving SQL queries
 - **user** - Can query data but cannot save training examples
 
 Add users to the admin group in `ldap_setup.ldif`:
@@ -115,42 +136,122 @@ member: cn=newuser,ou=users,dc=vanna,dc=ai
 
 ## Configuration
 
-### Environment Variables
+### Required Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ORACLE_USER` | Oracle database username | hr |
-| `ORACLE_PASSWORD` | Oracle database password | hr123 |
-| `ORACLE_DSN` | Oracle connection string | localhost:1521/FREEPDB1 |
-| `OLLAMA_MODEL` | Ollama model name | gpt-oss:20b |
-| `OLLAMA_HOST` | Ollama server URL | http://localhost:11434 |
-| `LDAP_HOST` | LDAP server hostname | ldap |
-| `LDAP_PORT` | LDAP server port | 389 |
-| `LDAP_ADMIN_PASSWORD` | LDAP admin password | Vanna123 |
-| `VANNA_PORT` | Web server port | 8000 |
+All of the following variables **must** be set in your `.env` file:
+
+#### Oracle Database
+
+- `ORACLE_USER` - Oracle database username
+- `ORACLE_PASSWORD` - Oracle database password
+- `ORACLE_DSN` - Oracle connection string (format: `host:port/service_name`)
+
+#### Inference Provider
+
+- `INFERENCE_PROVIDER` - Either `ollama` or `openai`
+
+**If using Ollama:**
+
+- `OLLAMA_MODEL` - Ollama model name (e.g., `gpt-oss:20b`)
+- `OLLAMA_HOST` - Ollama server URL (e.g., `http://localhost:11434`)
+
+**If using OpenAI:**
+
+- `OPENAI_API_KEY` - OpenAI API key
+- `OPENAI_MODEL` - OpenAI model name (e.g., `gpt-4`)
+
+#### ChromaDB
+
+- `CHROMA_COLLECTION` - ChromaDB collection name for agent memory
+- `CHROMA_PERSIST_DIR` - Directory path for ChromaDB persistence
+
+#### Server
+
+- `VANNA_HOST` - Server host (typically `0.0.0.0` for Docker)
+- `VANNA_PORT` - Server port (typically `8000`)
+
+#### LDAP
+
+- `LDAP_HOST` - LDAP server hostname (use `ldap` for Docker Compose)
+- `LDAP_PORT` - LDAP server port (default: `389`)
+- `LDAP_BASE_DN` - LDAP base DN (e.g., `dc=vanna,dc=ai`)
+- `LDAP_USER_DN_TEMPLATE` - User DN template (e.g., `cn={username},ou=users,dc=vanna,dc=ai`)
+- `LDAP_ADMIN_GROUP_DN` - Admin group DN (e.g., `cn=admin,ou=groups,dc=vanna,dc=ai`)
+- `LDAP_BIND_DN` - LDAP bind DN for searches (e.g., `cn=admin,dc=vanna,dc=ai`)
+- `LDAP_BIND_PASSWORD` - LDAP bind password
+
+### Optional Environment Variables
+
+These have defaults and can be omitted:
+
+| Variable                      | Description                                                      | Default                               |
+| ----------------------------- | ---------------------------------------------------------------- | ------------------------------------- |
+| `OLLAMA_TIMEOUT`            | Ollama request timeout (seconds)                                 | `240.0`                             |
+| `OLLAMA_NUM_CTX`            | Ollama context window size                                       | `8192`                              |
+| `OLLAMA_TEMPERATURE`        | Ollama temperature                                               | `0.7`                               |
+| `OPENAI_BASE_URL`           | OpenAI API base URL                                              | `https://api.openai.com/v1`         |
+| `OPENAI_TEMPERATURE`        | OpenAI temperature                                               | `0.7` (or `0.1` for gpt-oss-120b) |
+| `OPENAI_TIMEOUT`            | OpenAI request timeout (seconds)                                 | `60.0`                              |
+| `LDAP_USE_SSL`              | Enable LDAP SSL                                                  | `false`                             |
+| `EMAIL_DOMAIN`              | Email domain for user emails                                     | `vanna.ai`                          |
+| `GUEST_USERNAME`            | Guest user username                                              | `guest`                             |
+| `GUEST_EMAIL`               | Guest user email                                                 | `guest@vanna.ai`                    |
+| `VANNA_LOG_LEVEL`           | Logging level                                                    | `info`                              |
+| `VANNA_MAX_TOOL_ITERATIONS` | Max agent tool iterations                                        | `10`                                |
+| `UI_SHOW_API_ENDPOINTS`     | Show API endpoints in UI                                         | `true`                              |
+| `UI_PAGE_TITLE`             | Page title                                                       | `Agents Chat`                       |
+| `UI_HEADER_TITLE`           | Header title                                                     | `Agents`                            |
+| `UI_LOGIN_TITLE`            | Login form title                                                 | `Login to Continue`                 |
+| `UI_CHAT_TITLE`             | Chat interface title                                             | `Oracle Database AI Chat`           |
+| ...                           | (Many more UI_* variables available - see `backend/config.py`) |                                       |
 
 ### Using OpenAI Instead of Ollama
 
 To use OpenAI (or compatible API), set these in `.env`:
 
 ```env
+INFERENCE_PROVIDER=openai
 OPENAI_API_KEY=sk-your-api-key
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4
 ```
+
+For local or custom OpenAI-compatible endpoints:
+
+```env
+INFERENCE_PROVIDER=openai
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=http://localhost:1234/v1
+OPENAI_MODEL=your-model-name
+```
+
+## API Endpoints
+
+The application provides several API endpoints for chat interaction:
+
+- **POST** `/api/vanna/v2/chat_sse` - Server-Sent Events streaming
+- **WS** `/api/vanna/v2/chat_websocket` - WebSocket real-time chat
+- **POST** `/api/vanna/v2/chat_poll` - Request/response polling
+- **POST** `/api/vanna/v2/auth_test` - LDAP authentication test
+- **GET** `/health` - Health check endpoint
 
 ## Troubleshooting
 
 ### LDAP Container Keeps Restarting
 
 Check logs:
+
 ```bash
 docker logs ldap
+# Or with docker-compose:
+docker-compose logs ldap
 ```
 
 Common fixes:
+
 - Remove volumes and restart: `docker-compose down -v && docker-compose up -d`
 - Check `ldap_setup.ldif` for syntax errors
+- Verify `LDAP_ADMIN_PASSWORD` in `.env` matches `LDAP_BIND_PASSWORD`
 
 ### Login Returns 401 Unauthorized
 
@@ -159,25 +260,88 @@ Common fixes:
    ```bash
    docker exec ldap ldapsearch -x -H ldap://localhost -b "dc=vanna,dc=ai" -D "cn=admin,dc=vanna,dc=ai" -w Vanna123 "(cn=avinash)"
    ```
-3. Re-run the setup script
+3. Verify LDAP configuration in `.env` matches docker-compose settings
+4. Re-run the setup script: `./scripts/setup_ldap.sh` or `.\scripts\setup_ldap.ps1`
+5. Check application logs: `docker-compose logs vanna-app`
 
 ### Cannot Connect to Oracle
 
 1. Ensure Oracle is accessible from Docker:
-   - Use `host.docker.internal` instead of `localhost` in `.env`
+   - Use `host.docker.internal` instead of `localhost` in `ORACLE_DSN` for local Oracle instances
+   - Example: `ORACLE_DSN=host.docker.internal:1521/FREEPDB1`
 2. Check Oracle listener is running on the specified port
+3. Verify Oracle credentials are correct
+4. Test connection from the container:
+   ```bash
+   docker exec -it vanna-app python -c "import oracledb; conn = oracledb.connect(user='YOUR_USER', password='YOUR_PASS', dsn='YOUR_DSN'); print('Connected!')"
+   ```
+
+### ChromaDB Issues
+
+If you encounter ChromaDB errors:
+
+1. Check that `CHROMA_PERSIST_DIR` is writable
+2. The ONNX model is pre-downloaded in the Docker image, but if you're running locally, ChromaDB will download it automatically
+3. Reset ChromaDB by removing the volume: `docker-compose down -v` (this deletes all agent memory)
+
+### LLM Provider Issues
+
+**Ollama:**
+
+- Ensure Ollama is running and accessible at `OLLAMA_HOST`
+- Check that the model is available: `curl http://localhost:11434/api/tags`
+- Increase `OLLAMA_TIMEOUT` if queries are timing out
+
+**OpenAI:**
+
+- Verify `OPENAI_API_KEY` is set correctly
+- Check API quota and rate limits
+- For custom endpoints, verify `OPENAI_BASE_URL` is correct
+
+### Application Won't Start
+
+1. Check all required environment variables are set:
+   ```bash
+   # Check if .env file exists
+   cat .env
+   ```
+2. Review startup logs:
+   ```bash
+   docker-compose logs vanna-app
+   ```
+3. Verify Python dependencies are installed (if running locally):
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 ## Development
 
 ### Local Development (without Docker)
 
+For local development without Docker:
+
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
+# Make sure you have Oracle Instant Client installed and configured
+# For Linux: Download from Oracle and set LD_LIBRARY_PATH
+# For Windows: Download and install Oracle Instant Client
+
+# Set up environment variables (create .env file or export them)
+export ORACLE_USER=your_user
+export ORACLE_PASSWORD=your_password
+# ... (set all required variables)
+
 # Run the application
 python -m backend.main
 ```
+
+Note: For local development, you'll still need:
+
+- LDAP server running (can use Docker Compose just for LDAP: `docker-compose up ldap -d`)
+- Oracle database accessible
+- Ollama or OpenAI API access
 
 ### Project Structure
 
@@ -185,19 +349,108 @@ python -m backend.main
 database-chat/
 ├── backend/
 │   ├── __init__.py
-│   ├── main.py         # Flask server and LDAP auth
-│   ├── config.py       # Configuration management
-│   └── templates.py    # Custom login page template
+│   ├── main.py         # Flask server, LDAP auth, and agent setup
+│   ├── config.py       # Configuration management from environment
+│   └── templates.py    # Custom login page HTML template
+├── assets/             # Frontend assets
+│   ├── base.html       # Base HTML template
+│   ├── css/            # Stylesheets
+│   ├── js/             # JavaScript files (auth, chat, components)
+│   └── fonts/          # Custom fonts
 ├── scripts/
-│   ├── setup_ldap.sh   # LDAP setup (Linux/Mac)
-│   └── setup_ldap.ps1  # LDAP setup (Windows)
-├── ldap_setup.ldif     # LDAP user definitions
+│   ├── setup_ldap.sh   # LDAP setup script (Linux/Mac)
+│   └── setup_ldap.ps1  # LDAP setup script (Windows)
+├── chroma_db/          # ChromaDB persistence directory (created at runtime)
+├── ldap_setup.ldif     # LDAP user and group definitions
 ├── docker-compose.yml  # Container orchestration
-├── Dockerfile          # App container build
+├── Dockerfile          # App container build definition
 ├── requirements.txt    # Python dependencies
-└── .env.example        # Environment template
+├── .env.example        # Environment variables template
+└── README.md           # This file
 ```
+
+### Key Components
+
+- **`backend/main.py`**:
+
+  - Custom Flask server extending VannaFlaskServer
+  - LDAP authentication via `LdapUserResolver`
+  - Agent creation with Oracle, LLM, and ChromaDB integration
+  - Custom routes for authentication and static assets
+- **`backend/config.py`**:
+
+  - Comprehensive configuration management
+  - Loads from environment variables
+  - Supports both Ollama and OpenAI inference providers
+  - UI text customization
+- **`backend/templates.py`**:
+
+  - Generates custom login HTML
+  - Loads assets from filesystem
+  - Injects configuration into templates
+
+### Building and Running with Docker
+
+```bash
+# Build the image
+docker-compose build
+
+# Run in foreground (for debugging)
+docker-compose up
+
+# Run in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f vanna-app
+
+# Stop services
+docker-compose down
+
+# Stop and remove volumes (clears ChromaDB and LDAP data)
+docker-compose down -v
+```
+
+## Agent Capabilities
+
+The Vanna Agent provides several tools based on user permissions:
+
+**All Users:**
+
+- `RunSqlTool` - Execute SQL queries on Oracle database
+- `SearchSavedCorrectToolUsesTool` - Search past successful queries
+- `SaveTextMemoryTool` - Save text-based memories
+- `VisualizeDataTool` - Create visualizations from query results
+
+**Admin Users Only:**
+
+- `SaveQuestionToolArgsTool` - Save training examples for query improvement
+
+## Security Considerations
+
+- **LDAP Passwords**: Store LDAP passwords securely and never commit `.env` files
+- **Oracle Credentials**: Use strong passwords and consider using Oracle wallet for credential management
+- **API Keys**: Keep OpenAI API keys secure and rotate them regularly
+- **Network**: In production, use SSL/TLS for LDAP (`LDAP_USE_SSL=true`)
+- **Access Control**: Regularly review LDAP group memberships and user permissions
 
 ## License
 
-[Your License Here]
+CREATE TABLE "HR"."AI_USERS"
+   (	"USERNAME" VARCHAR2(50 BYTE) NOT NULL ENABLE,
+	"IS_ADMIN" NUMBER DEFAULT 0 NOT NULL ENABLE,
+	"IS_SUPERUSER" NUMBER DEFAULT 0 NOT NULL ENABLE,
+	"IS_NORMALUSER" NUMBER DEFAULT 1 NOT NULL ENABLE,
+	 CONSTRAINT "AI_USERS_PK" PRIMARY KEY ("USERNAME")
+  USING INDEX PCTFREE 10 INITRANS 2 MAXTRANS 255
+  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645
+  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1
+  BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)
+  TABLESPACE "USERS"  ENABLE
+   ) SEGMENT CREATION IMMEDIATE
+  PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255
+ NOCOMPRESS LOGGING
+  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645
+  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1
+  BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)
+  TABLESPACE "USERS" ;
