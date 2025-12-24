@@ -23,7 +23,7 @@ Components:
     - main.py: Application entry point
     - config.py: Configuration management with env var support
     - create_agent(): Factory function to create configured agent
-    - LdapUserResolver: LDAP-based user authentication
+    - HybridUserResolver: LDAP auth + Database role resolution
 
 For production deployments, consider:
     - Using environment variables for sensitive credentials
@@ -31,7 +31,7 @@ For production deployments, consider:
 """
 
 from .config import config, AppConfig, OracleConfig, OllamaConfig, OpenAIConfig, ChromaConfig, ServerConfig, LdapConfig
-from .main import create_agent, main, LdapUserResolver
+from .main import create_agent, main, HybridUserResolver
 
 __all__ = [
     # Configuration
@@ -46,5 +46,5 @@ __all__ = [
     # Main application
     "create_agent",
     "main", 
-    "LdapUserResolver",
+    "HybridUserResolver",
 ]

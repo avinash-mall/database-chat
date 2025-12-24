@@ -44,7 +44,12 @@ from vanna.integrations.chromadb import ChromaAgentMemory
 from ldap3 import Server, Connection, ALL, SUBTREE
 from ldap3.core.exceptions import LDAPException
 
+import oracledb
+
 from .config import config
+from .rls_service import RowLevelSecurityService, RLSConfig
+from .secure_sql_tool import SecureRunSqlTool
+from .system_prompt_builder import UserAwareSystemPromptBuilder
 
 
 # =============================================================================
@@ -169,19 +174,26 @@ class VannaFlaskServer(BaseVannaFlaskServer):
 # User Authentication
 # =============================================================================
 
-class LdapUserResolver(UserResolver):
-    """LDAP-based user resolver for enterprise authentication.
+class HybridUserResolver(UserResolver):
+    """Hybrid user resolver: LDAP authentication + Database role resolution.
     
-    This implementation authenticates users against an LDAP server:
-    - Validates credentials via LDAP bind
-    - Checks group membership for admin privileges
+    This implementation:
+    - Authenticates users against an LDAP server (validates credentials)
     - Reads user attributes (email, uid) from LDAP
+    - Queries AI_USERS table in Oracle database for role/group membership
+    
+    AI_USERS table structure:
+    - USERNAME: VARCHAR2(50) - Primary key, matches LDAP username
+    - IS_ADMIN: NUMBER - 1 = admin group membership
+    - IS_SUPERUSER: NUMBER - 1 = superuser group membership  
+    - IS_NORMALUSER: NUMBER - 1 = user group membership (default)
     
     Requires 'Authorization' header with Basic auth or cookies for session.
     """
     
-    def __init__(self, ldap_config):
+    def __init__(self, ldap_config, oracle_config):
         self.config = ldap_config
+        self.oracle_config = oracle_config
         self._server = None
     
     @property
@@ -194,51 +206,76 @@ class LdapUserResolver(UserResolver):
             )
         return self._server
     
-    def _get_user_groups(self, conn: Connection, user_dn: str) -> list[str]:
-        """Get groups the user belongs to."""
+    def _get_user_roles_from_db(self, username: str) -> list[str]:
+        """Get user roles from AI_USERS database table.
+        
+        Args:
+            username: The username to look up in AI_USERS table
+            
+        Returns:
+            List of group names based on database flags:
+            - 'admin' if IS_ADMIN = 1
+            - 'superuser' if IS_SUPERUSER = 1
+            - 'user' if IS_NORMALUSER = 1 or as default fallback
+            
+        Raises:
+            RuntimeError: If database connection or query fails
+        """
         groups = []
         
-        # Use bind DN connection for group searches (user may not have read access to groups)
-        search_conn = None
         try:
-            # Create a new connection using bind DN for searching groups
-            search_conn = Connection(self.server, user=self.config.bind_dn, password=self.config.bind_password, auto_bind=True)
-        except LDAPException as e:
-            # Fallback to user connection if bind DN fails
-            search_conn = conn
-        
-        try:
-            # Try searching for groups where user is a member
-            # Use exact match first (most common)
-            search_filters = [
-                f"(&(objectClass=groupOfNames)(member={user_dn}))",
-                f"(&(objectClass=groupOfUniqueNames)(uniqueMember={user_dn}))",
-                f"(&(objectClass=posixGroup)(memberUid={user_dn.split(',')[0].split('=')[1]}))",
-            ]
+            # Connect to Oracle database
+            connection = oracledb.connect(
+                user=self.oracle_config.user,
+                password=self.oracle_config.password,
+                dsn=self.oracle_config.dsn
+            )
             
-            for search_filter in search_filters:
-                try:
-                    search_conn.search(
-                        search_base=self.config.base_dn,
-                        search_filter=search_filter,
-                        search_scope=SUBTREE,
-                        attributes=['cn']
-                    )
-                    for entry in search_conn.entries:
-                        group_name = str(entry.cn).strip()
-                        if group_name and group_name not in groups:
-                            groups.append(group_name)
-                except LDAPException:
-                    continue
-        except LDAPException as e:
-            print(f"LDAP: Error searching for groups for {user_dn}: {e}")
-        finally:
-            # Close the search connection if we created it
-            if search_conn and search_conn != conn:
-                try:
-                    search_conn.unbind()
-                except:
-                    pass
+            cursor = connection.cursor()
+            
+            # Query the AI_USERS table for role flags
+            cursor.execute(
+                """
+                SELECT IS_ADMIN, IS_SUPERUSER, IS_NORMALUSER 
+                FROM AI_USERS 
+                WHERE UPPER(USERNAME) = UPPER(:username)
+                """,
+                {"username": username}
+            )
+            
+            row = cursor.fetchone()
+            
+            if row:
+                is_admin, is_superuser, is_normaluser = row
+                
+                # Map database flags to group memberships
+                if is_admin and is_admin == 1:
+                    groups.append('admin')
+                if is_superuser and is_superuser == 1:
+                    groups.append('superuser')
+                if is_normaluser and is_normaluser == 1:
+                    groups.append('user')
+                
+                # Ensure at least 'user' group if no flags are set
+                if not groups:
+                    groups.append('user')
+                    
+                print(f"DB: User '{username}' has roles: {groups}")
+            else:
+                # User not found in AI_USERS table - raise error, do not fallback
+                cursor.close()
+                connection.close()
+                raise RuntimeError(f"User '{username}' not found in AI_USERS table. Access denied.")
+            
+            cursor.close()
+            connection.close()
+            
+        except oracledb.Error as e:
+            # On database error, raise exception instead of falling back
+            error_msg = f"Database error querying AI_USERS for '{username}': {e}"
+            print(f"DB: {error_msg}")
+            raise RuntimeError(error_msg)
+        
         return groups
     
     def _authenticate_user(self, username: str, password: str) -> tuple[bool, dict]:
@@ -259,14 +296,11 @@ class LdapUserResolver(UserResolver):
                 'dn': user_dn,
                 'username': username,
                 'email': None,
-                'groups': []
             }
             
             if conn.entries:
                 entry = conn.entries[0]
                 user_info['email'] = str(entry.mail) if hasattr(entry, 'mail') and entry.mail else f"{username}@{self.config.email_domain}"
-            
-            user_info['groups'] = self._get_user_groups(conn, user_dn)
             
             conn.unbind()
             return True, user_info
@@ -276,7 +310,11 @@ class LdapUserResolver(UserResolver):
             return False, {}
     
     async def resolve_user(self, request_context: RequestContext) -> User:
-        """Resolve user from request context using LDAP authentication."""
+        """Resolve user from request context using LDAP auth + DB roles.
+        
+        Raises:
+            RuntimeError: If authentication fails or user not authorized
+        """
         import base64
         
         auth_header = request_context.get_header('Authorization')
@@ -289,13 +327,8 @@ class LdapUserResolver(UserResolver):
                 authenticated, user_info = self._authenticate_user(username, password)
                 
                 if authenticated:
-                    # Get groups from LDAP (normalize to lowercase for comparison)
-                    ldap_groups = [g.lower().strip() for g in user_info.get('groups', [])]
-                    
-                    groups = ['user']
-                    # Case-insensitive check for admin group
-                    if 'admin' in ldap_groups:
-                        groups = ['admin', 'user']
+                    # Get roles from database - will raise if user not in AI_USERS
+                    groups = self._get_user_roles_from_db(username)
                     
                     return User(
                         id=username,
@@ -303,15 +336,22 @@ class LdapUserResolver(UserResolver):
                         username=username,
                         group_memberships=groups
                     )
+                else:
+                    # LDAP authentication failed - raise exception
+                    raise RuntimeError(f"LDAP authentication failed for user '{username}'")
+            except RuntimeError:
+                # Re-raise RuntimeError (from _get_user_roles_from_db or explicit raise)
+                raise
             except Exception as e:
                 print(f"Error processing auth header: {e}")
+                raise RuntimeError(f"Authentication error: {e}")
         
         session_user = request_context.get_cookie('vanna_user')
         session_auth = request_context.get_cookie('vanna_auth')
         
         if session_user and session_auth:
             # If we have session cookies, try to re-authenticate with LDAP
-            # to get fresh group information (in case groups changed or cookie is stale)
+            # and get fresh role information from database
             try:
                 credentials = base64.b64decode(session_auth).decode('utf-8')
                 username, password = credentials.split(':', 1)
@@ -321,13 +361,8 @@ class LdapUserResolver(UserResolver):
                     authenticated, user_info = self._authenticate_user(username, password)
                     
                     if authenticated:
-                        # Get groups from LDAP (normalize to lowercase for comparison)
-                        ldap_groups = [g.lower().strip() for g in user_info.get('groups', [])]
-                        
-                        groups = ['user']
-                        # Case-insensitive check for admin group
-                        if 'admin' in ldap_groups:
-                            groups = ['admin', 'user']
+                        # Get roles from database - will raise if user not in AI_USERS
+                        groups = self._get_user_roles_from_db(username)
                         
                         return User(
                             id=username,
@@ -335,25 +370,18 @@ class LdapUserResolver(UserResolver):
                             username=username,
                             group_memberships=groups
                         )
+                    else:
+                        raise RuntimeError(f"Session re-authentication failed for user '{username}'")
+            except RuntimeError:
+                # Re-raise RuntimeError
+                raise
             except Exception as e:
                 print(f"LDAP: Error re-authenticating session user {session_user}: {e}")
-                # Fall through to cookie-based lookup
+                raise RuntimeError(f"Session authentication error: {e}")
         
-        # Fallback: use cookie groups if re-authentication failed
-        session_groups = request_context.get_cookie('vanna_groups')
-        if session_user:
-            # Parse groups from cookie (normalize and filter empty strings)
-            groups = [g.strip() for g in session_groups.split(',') if g.strip()] if session_groups else ['user']
-            # Ensure 'user' is always included
-            if 'user' not in groups:
-                groups.append('user')
-            return User(
-                id=session_user,
-                email=f"{session_user}@{self.config.email_domain}",
-                username=session_user,
-                group_memberships=groups
-            )
-        
+        # No valid authentication provided - this is an unauthenticated request
+        # Return guest user only for unauthenticated requests (no auth header, no session)
+        # This allows the login page to load
         return User(
             id=self.config.guest_username,
             email=self.config.guest_email,
@@ -417,32 +445,68 @@ def create_agent() -> Agent:
         persist_directory=config.chroma.persist_directory
     )
     
-    # Create the SQL execution tool
-    db_tool = RunSqlTool(sql_runner=oracle_runner)
+    # ==========================================================================
+    # Row-Level Security (RLS) Setup
+    # ==========================================================================
+    # Create RLS service for filtering query results based on user context
+    rls_config = RLSConfig(
+        enabled=config.rls.enabled,
+        cache_ttl=config.rls.cache_ttl,
+        excluded_tables=config.rls.excluded_tables_list
+    )
+    rls_service = RowLevelSecurityService(
+        oracle_config=config.oracle,
+        rls_config=rls_config
+    )
     
-    # Configure user resolver (LDAP-based)
-    user_resolver = LdapUserResolver(ldap_config=config.ldap)
+    # Create the secure SQL execution tool with RLS filtering
+    # This replaces the standard RunSqlTool
+    # Note: The SecureRunSqlTool handles caching internally
+    db_tool = SecureRunSqlTool(
+        sql_runner=oracle_runner,
+        rls_service=rls_service
+    )
+    
+    print(f"RLS: Enabled={config.rls.enabled}, CacheTTL={config.rls.cache_ttl}s")
+    if config.rls.excluded_tables_list:
+        print(f"RLS: Excluded tables: {config.rls.excluded_tables_list}")
+    
+    # Configure user resolver (LDAP auth + Database role resolution)
+    user_resolver = HybridUserResolver(ldap_config=config.ldap, oracle_config=config.oracle)
     
     # Set up the tool registry with access controls
+    # Roles from AI_USERS table: admin, superuser, user
     tools = ToolRegistry()
-    tools.register_local_tool(db_tool, access_groups=['admin', 'user'])
-    tools.register_local_tool(SaveQuestionToolArgsTool(), access_groups=['admin'])
-    tools.register_local_tool(SearchSavedCorrectToolUsesTool(), access_groups=['admin', 'user'])
-    tools.register_local_tool(SaveTextMemoryTool(), access_groups=['admin', 'user'])
-    tools.register_local_tool(VisualizeDataTool(), access_groups=['admin', 'user'])
+    tools.register_local_tool(db_tool, access_groups=['admin', 'superuser', 'user'])
+    tools.register_local_tool(SaveQuestionToolArgsTool(), access_groups=['admin', 'superuser'])
+    tools.register_local_tool(SearchSavedCorrectToolUsesTool(), access_groups=['admin', 'superuser', 'user'])
+    tools.register_local_tool(SaveTextMemoryTool(), access_groups=['admin', 'superuser', 'user'])
+    tools.register_local_tool(VisualizeDataTool(), access_groups=['admin', 'superuser', 'user'])
     
     # Create agent configuration
     agent_config = AgentConfig(
         max_tool_iterations=config.agent.max_tool_iterations
     )
     
+    # Create user-aware system prompt builder
+    # This injects user identity and RLS filter values into the LLM prompt
+    system_prompt_builder = UserAwareSystemPromptBuilder(
+        rls_service=rls_service,
+        company_name="Database Chat",
+        include_rls_values=True
+    )
+    
     # Create and return the agent
+    # Note: workflow_handler=None disables the default handler that shows "Admin View"
+    # message based on group membership
     agent = Agent(
         llm_service=llm,
         tool_registry=tools,
         user_resolver=user_resolver,
         agent_memory=agent_memory,
-        config=agent_config
+        config=agent_config,
+        workflow_handler=None,  # Disable default workflow handler
+        system_prompt_builder=system_prompt_builder  # User-aware prompts
     )
     
     return agent

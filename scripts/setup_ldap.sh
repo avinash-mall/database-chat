@@ -1,6 +1,6 @@
 #!/bin/bash
 # LDAP User Setup Script
-# This script initializes the LDAP server with users and groups from ldap_setup.ldif
+# This script initializes/updates the LDAP server with users and groups from ldap_setup.ldif
 # Run this after starting the containers with: docker-compose up -d
 
 set -e
@@ -31,29 +31,91 @@ for i in $(seq 1 $MAX_RETRIES); do
     sleep $RETRY_DELAY
 done
 
-# Check if users already exist
-echo "Checking if users already exist..."
-if docker exec $LDAP_CONTAINER ldapsearch -x -H ldap://localhost -b "dc=vanna,dc=ai" -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD" "(cn=avinash)" 2>/dev/null | grep -q "cn: avinash"; then
-    echo "Users already exist in LDAP. Skipping import."
-    echo "To re-import, first delete existing entries or recreate volumes with: docker-compose down -v"
-    exit 0
-fi
-
 # Copy LDIF file to container
 echo "Copying $LDIF_FILE to container..."
 docker cp "$LDIF_FILE" "$LDAP_CONTAINER:/tmp/ldap_setup.ldif"
 
-# Import LDIF
-echo "Importing LDAP entries..."
-docker exec $LDAP_CONTAINER ldapadd -x -H ldap://localhost -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD" -f /tmp/ldap_setup.ldif
+echo ""
+echo "Processing LDAP entries..."
+echo "---------------------------------------------------"
 
+# Initialize counters
+ADDED=0
+SKIPPED=0
+FAILED=0
+
+# Process LDIF file - split by blank lines and process each entry
+current_entry=""
+current_dn=""
+
+process_entry() {
+    local entry="$1"
+    local dn="$2"
+    
+    if [ -z "$dn" ]; then
+        return
+    fi
+    
+    # Check if entry already exists
+    if docker exec $LDAP_CONTAINER ldapsearch -x -H ldap://localhost -b "$dn" -s base -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD" "(objectClass=*)" 2>/dev/null | grep -q "^dn: "; then
+        echo "  [SKIP] $dn (already exists)"
+        SKIPPED=$((SKIPPED + 1))
+    else
+        # Create temp file with entry
+        echo "$entry" > /tmp/single_entry.ldif
+        docker cp /tmp/single_entry.ldif "$LDAP_CONTAINER:/tmp/single_entry.ldif"
+        rm -f /tmp/single_entry.ldif
+        
+        # Try to add the entry
+        if docker exec $LDAP_CONTAINER ldapadd -x -H ldap://localhost -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD" -f /tmp/single_entry.ldif 2>/dev/null; then
+            echo "  [ADD]  $dn"
+            ADDED=$((ADDED + 1))
+        else
+            echo "  [FAIL] $dn"
+            FAILED=$((FAILED + 1))
+        fi
+    fi
+}
+
+# Read LDIF file and process entries
+while IFS= read -r line || [ -n "$line" ]; do
+    if [ -z "$line" ]; then
+        # Blank line - process accumulated entry
+        if [ -n "$current_entry" ]; then
+            process_entry "$current_entry" "$current_dn"
+            current_entry=""
+            current_dn=""
+        fi
+    else
+        # Accumulate entry
+        if [ -z "$current_entry" ]; then
+            current_entry="$line"
+        else
+            current_entry="$current_entry
+$line"
+        fi
+        # Extract DN
+        if echo "$line" | grep -q "^dn: "; then
+            current_dn=$(echo "$line" | sed 's/^dn: //')
+        fi
+    fi
+done < "$LDIF_FILE"
+
+# Process last entry if file doesn't end with blank line
+if [ -n "$current_entry" ]; then
+    process_entry "$current_entry" "$current_dn"
+fi
+
+echo "---------------------------------------------------"
 echo ""
 echo "==================================================="
 echo "LDAP setup complete!"
 echo "==================================================="
 echo ""
-echo "Users created:"
+echo "Summary: Added=$ADDED, Skipped=$SKIPPED, Failed=$FAILED"
+echo ""
+echo "Current users:"
 docker exec $LDAP_CONTAINER ldapsearch -x -H ldap://localhost -b "ou=users,dc=vanna,dc=ai" -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD" "(objectClass=inetOrgPerson)" cn mail 2>/dev/null | grep -E "^(dn:|cn:|mail:)" || echo "  (none found)"
 echo ""
-echo "Groups created:"
+echo "Current groups:"
 docker exec $LDAP_CONTAINER ldapsearch -x -H ldap://localhost -b "ou=groups,dc=vanna,dc=ai" -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD" "(objectClass=groupOfNames)" cn 2>/dev/null | grep -E "^(dn:|cn:)" || echo "  (none found)"

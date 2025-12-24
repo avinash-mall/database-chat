@@ -315,6 +315,30 @@ class AgentConfig:
 
 
 @dataclass
+class RLSConfig:
+    """Row-Level Security configuration."""
+    enabled: bool = True
+    cache_ttl: float = 300.0  # 5 minutes
+    excluded_tables: str = ""  # Comma-separated list of excluded tables
+    
+    @classmethod
+    def from_env(cls) -> "RLSConfig":
+        """Load RLS configuration from environment variables."""
+        return cls(
+            enabled=_get_env("RLS_ENABLED", "true").lower() == "true",
+            cache_ttl=float(_get_env("RLS_CACHE_TTL", "300.0")),
+            excluded_tables=_get_env("RLS_EXCLUDED_TABLES", ""),
+        )
+    
+    @property
+    def excluded_tables_list(self) -> list:
+        """Get excluded tables as a list."""
+        if not self.excluded_tables:
+            return []
+        return [t.strip().upper() for t in self.excluded_tables.split(",") if t.strip()]
+
+
+@dataclass
 class AppConfig:
     """Complete application configuration."""
     oracle: OracleConfig
@@ -325,6 +349,7 @@ class AppConfig:
     ldap: LdapConfig
     ui: UIConfig
     agent: AgentConfig
+    rls: RLSConfig
     
     @classmethod
     def from_env(cls) -> "AppConfig":
@@ -338,6 +363,7 @@ class AppConfig:
             ldap=LdapConfig.from_env(),
             ui=UIConfig.from_env(),
             agent=AgentConfig.from_env(),
+            rls=RLSConfig.from_env(),
         )
     
     @property
