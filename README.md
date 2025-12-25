@@ -11,7 +11,7 @@ A natural language interface for querying Oracle databases using the Vanna AI fr
 - **User Context Awareness**: LLM automatically knows who you are - no need to identify yourself
 - **Schema Training**: Automatic database schema discovery and LLM context injection at startup
 - **Multiple LLM Support**: Choose between Ollama (local) or OpenAI (cloud) for inference
-- **Persistent Memory**: ChromaDB-based agent memory for context retention
+- **Persistent Memory**: Milvus-based agent memory for context retention
 - **Modern Web UI**: Custom-built chat interface with authentication
 - **Docker Support**: Containerized deployment with Docker Compose
 
@@ -76,7 +76,7 @@ Open http://localhost:8000 in your browser and log in with:
 │  └─────────────┘  └─────────────┘  └─────────────────────┘ │
 │                                                               │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │              ChromaDB Agent Memory                     │  │
+│  │              Milvus Agent Memory                       │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
          │                                    │
@@ -209,10 +209,13 @@ All of the following variables **must** be set in your `.env` file:
 - `OPENAI_API_KEY` - OpenAI API key
 - `OPENAI_MODEL` - OpenAI model name (e.g., `gpt-4`)
 
-#### ChromaDB
+#### Milvus
 
-- `CHROMA_COLLECTION` - ChromaDB collection name for agent memory
-- `CHROMA_PERSIST_DIR` - Directory path for ChromaDB persistence
+- `MILVUS_HOST` - Milvus host (default: `milvus` for Docker, `localhost` for local)
+- `MILVUS_PORT` - Milvus port (default: `19530`)
+- `MILVUS_COLLECTION` - Milvus collection name for agent memory (default: `vanna_memory`)
+- `MINIO_ACCESS_KEY` - MinIO access key (default: `minioadmin`)
+- `MINIO_SECRET_KEY` - MinIO secret key (default: `minioadmin`)
 
 #### Server
 
@@ -325,13 +328,17 @@ Common fixes:
    docker exec -it vanna-app python -c "import oracledb; conn = oracledb.connect(user='YOUR_USER', password='YOUR_PASS', dsn='YOUR_DSN'); print('Connected!')"
    ```
 
-### ChromaDB Issues
+### Milvus Issues
 
-If you encounter ChromaDB errors:
+If you encounter Milvus errors:
 
-1. Check that `CHROMA_PERSIST_DIR` is writable
-2. The ONNX model is pre-downloaded in the Docker image, but if you're running locally, ChromaDB will download it automatically
-3. Reset ChromaDB by removing the volume: `docker-compose down -v` (this deletes all agent memory)
+1. Check that Milvus, etcd, and MinIO containers are running: `docker-compose ps`
+2. Verify Milvus is accessible: `curl http://localhost:9091/healthz` (should return OK)
+3. Check Milvus logs: `docker-compose logs milvus`
+4. Check etcd logs: `docker-compose logs etcd`
+5. Check MinIO logs: `docker-compose logs minio`
+6. Reset Milvus data by stopping containers and deleting local directories: `./milvus_data/`, `./etcd_data/`, `./minio_data/` (this deletes all agent memory)
+7. Ensure bind mount directories are writable on the host system
 
 ### LLM Provider Issues
 
@@ -413,7 +420,9 @@ database-chat/
 ├── scripts/
 │   ├── setup_ldap.sh             # LDAP setup script (Linux/Mac)
 │   └── setup_ldap.ps1            # LDAP setup script (Windows)
-├── chroma_db/                    # ChromaDB persistence directory (created at runtime)
+├── milvus_data/                  # Milvus data directory (created at runtime)
+├── etcd_data/                    # etcd metadata directory (created at runtime)
+├── minio_data/                   # MinIO object storage directory (created at runtime)
 ├── ldap_setup.ldif               # LDAP user and group definitions
 ├── docker-compose.yml            # Container orchestration
 ├── Dockerfile                    # App container build definition
@@ -427,7 +436,7 @@ database-chat/
 
   - Custom Flask server extending VannaFlaskServer
   - LDAP authentication via `LdapUserResolver`
-  - Agent creation with Oracle, LLM, and ChromaDB integration
+  - Agent creation with Oracle, LLM, and Milvus integration
   - Custom routes for authentication and static assets
 - **`backend/config.py`**:
 
@@ -459,8 +468,11 @@ docker-compose logs -f vanna-app
 # Stop services
 docker-compose down
 
-# Stop and remove volumes (clears ChromaDB and LDAP data)
+# Stop and remove volumes (clears LDAP data)
+# Note: Milvus data is stored in local directories (milvus_data/, etcd_data/, minio_data/)
+# Delete these directories manually to reset Milvus data
 docker-compose down -v
+rm -rf milvus_data etcd_data minio_data
 ```
 
 ## Agent Capabilities

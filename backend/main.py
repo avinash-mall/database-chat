@@ -7,7 +7,7 @@ interface for querying data using the Vanna AI framework.
 Configuration:
     - Oracle DB: localhost:1521 with user 'hr'
     - LLM: Ollama with model 'gpt-oss:20b' at localhost:11434
-    - Agent Memory: ChromaDB for persistent memory storage
+    - Agent Memory: Milvus for persistent memory storage
 
 Usage:
     python -m app.main
@@ -41,7 +41,7 @@ from .templates import get_ldap_login_html
 from vanna.integrations.ollama import OllamaLlmService
 from vanna.integrations.openai import OpenAILlmService
 from vanna.integrations.oracle import OracleRunner
-from vanna.integrations.chromadb import ChromaAgentMemory
+from vanna.integrations.milvus import MilvusAgentMemory
 
 from ldap3 import Server, Connection, ALL, SUBTREE
 from ldap3.core.exceptions import LDAPException
@@ -442,10 +442,11 @@ def create_agent() -> Agent:
         dsn=config.oracle.dsn
     )
     
-    # Configure agent memory (ChromaDB)
-    agent_memory = ChromaAgentMemory(
-        collection_name=config.chroma.collection_name,
-        persist_directory=config.chroma.persist_directory
+    # Configure agent memory (Milvus)
+    agent_memory = MilvusAgentMemory(
+        host=config.milvus.host,
+        port=config.milvus.port,
+        collection_name=config.milvus.collection_name
     )
     
     # ==========================================================================
@@ -556,7 +557,7 @@ def main():
         print(f"  LLM Service: OpenAI ({config.openai.model}){base_url_info}{temp_info}")
     else:
         print(f"  LLM Service: Ollama ({config.ollama.model}) at {config.ollama.host}")
-    print(f"  Agent Memory: ChromaDB ({config.chroma.collection_name})")
+    print(f"  Agent Memory: Milvus ({config.milvus.host}:{config.milvus.port}/{config.milvus.collection_name})")
     print(f"  Server: {config.server.host}:{config.server.port}")
     print()
     

@@ -3,7 +3,7 @@ Schema Training Module for Database Chat Application.
 
 This module provides functions to train Vanna's agent memory with the
 Oracle database schema. It queries Oracle metadata and saves schema
-information (DDL, table descriptions, relationships) to ChromaDB memory.
+information (DDL, table descriptions, relationships) to Milvus memory.
 
 The training happens at startup and can be refreshed periodically.
 """
@@ -31,7 +31,7 @@ class SchemaTrainer:
     This class:
     1. Queries Oracle metadata to get table/view definitions
     2. Generates DDL-like descriptions for each table
-    3. Saves the schema info to ChromaAgentMemory as text memories
+    3. Saves the schema info to MilvusAgentMemory as text memories
     
     The LLM can then search these memories when it needs schema context.
     """
@@ -42,7 +42,7 @@ class SchemaTrainer:
         
         Args:
             oracle_config: Oracle database configuration
-            agent_memory: ChromaAgentMemory instance for storing training data
+            agent_memory: MilvusAgentMemory instance for storing training data
         """
         self.oracle_config = oracle_config
         self.agent_memory = agent_memory

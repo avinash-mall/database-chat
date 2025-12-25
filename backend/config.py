@@ -15,8 +15,9 @@ Required Environment Variables:
     OPENAI_API_KEY: OpenAI API key (required if INFERENCE_PROVIDER=openai)
     OPENAI_MODEL: OpenAI model name (required if INFERENCE_PROVIDER=openai)
     
-    CHROMA_COLLECTION: ChromaDB collection name
-    CHROMA_PERSIST_DIR: ChromaDB persistence directory
+    MILVUS_HOST: Milvus host
+    MILVUS_PORT: Milvus port
+    MILVUS_COLLECTION: Milvus collection name for agent memory
     
     VANNA_HOST: Server host
     VANNA_PORT: Server port
@@ -137,17 +138,19 @@ class OpenAIConfig:
 
 
 @dataclass
-class ChromaConfig:
-    """ChromaDB agent memory configuration."""
+class MilvusConfig:
+    """Milvus agent memory configuration."""
+    host: str
+    port: int
     collection_name: str
-    persist_directory: str
     
     @classmethod
-    def from_env(cls) -> "ChromaConfig":
-        """Load ChromaDB configuration from environment variables."""
+    def from_env(cls) -> "MilvusConfig":
+        """Load Milvus configuration from environment variables."""
         return cls(
-            collection_name=_require_env("CHROMA_COLLECTION"),
-            persist_directory=_require_env("CHROMA_PERSIST_DIR"),
+            host=_get_env("MILVUS_HOST", "milvus"),
+            port=int(_get_env("MILVUS_PORT", "19530")),
+            collection_name=_get_env("MILVUS_COLLECTION", "vanna_memory"),
         )
 
 
@@ -344,7 +347,7 @@ class AppConfig:
     oracle: OracleConfig
     ollama: OllamaConfig
     openai: OpenAIConfig
-    chroma: ChromaConfig
+    milvus: MilvusConfig
     server: ServerConfig
     ldap: LdapConfig
     ui: UIConfig
@@ -358,7 +361,7 @@ class AppConfig:
             oracle=OracleConfig.from_env(),
             ollama=OllamaConfig.from_env(),
             openai=OpenAIConfig.from_env(),
-            chroma=ChromaConfig.from_env(),
+            milvus=MilvusConfig.from_env(),
             server=ServerConfig.from_env(),
             ldap=LdapConfig.from_env(),
             ui=UIConfig.from_env(),

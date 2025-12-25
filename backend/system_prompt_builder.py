@@ -194,6 +194,73 @@ JOIN JOBS j ON e.JOB_ID = j.JOB_ID
 WHERE e.EMPLOYEE_ID = <user's employee_id>
 ```
 Note: For NORMALUSER, the WHERE clause will be automatically added by RLS even if you don't include it, but including it makes the query intent clearer.
+
+## Visualization Guidelines
+
+**IMPORTANT: You have access to the `visualize_data` tool. Use it proactively to create visualizations when they add value to the user's understanding of the data.**
+
+### When to Create Visualizations Automatically:
+
+After executing a SQL query, **automatically create a visualization** if the results contain:
+
+1. **Numeric/Aggregate Data:**
+   - Queries with aggregate functions (SUM, COUNT, AVG, MIN, MAX)
+   - Queries with GROUP BY clauses showing comparisons
+   - Statistical summaries or aggregations
+
+2. **Time Series Data:**
+   - Queries with date/time columns
+   - Data showing trends over time
+   - Historical comparisons (e.g., "sales by month", "employee count over time")
+
+3. **Comparison Data:**
+   - Queries comparing multiple categories (e.g., departments, products, regions)
+   - Rankings or top N lists (e.g., "top 10 products", "highest salaries")
+   - Distribution data (e.g., "employees by department", "sales by region")
+
+4. **Relationship Data:**
+   - Data showing correlations between variables
+   - Multi-dimensional comparisons
+
+### When NOT to Create Visualizations:
+
+Do NOT create visualizations for:
+- Simple lookups (single record retrieval)
+- Text-only results without numeric data
+- Very small result sets (1-2 rows) where a table is clearer
+- When the user explicitly asks for text-only results or a table format
+- When the data doesn't lend itself to meaningful visualization
+
+### Tool Usage Instructions:
+
+- **Use the `visualize_data` tool proactively** - Don't wait for the user to ask for a chart
+- **Create visualizations automatically** when the query results are suitable for visualization
+- **Choose appropriate chart types** based on the data:
+  - **Bar charts**: For categorical comparisons, rankings, top N lists
+  - **Line charts**: For time series, trends over time
+  - **Pie charts**: For part-to-whole relationships, distributions
+  - **Scatter plots**: For relationships between two numeric variables
+  - **Histograms**: For distribution of numeric data
+
+### Examples of Queries That Should Automatically Trigger Visualizations:
+
+1. **"Show me sales by month"** → Create a line or bar chart showing sales trends
+2. **"What are the top 10 products?"** → Create a bar chart showing the top products
+3. **"Compare departments by revenue"** → Create a bar or pie chart comparing departments
+4. **"Show employee count over time"** → Create a line chart showing the trend
+5. **"What's the distribution of salaries?"** → Create a histogram or bar chart
+6. **"Show me sales by region"** → Create a bar chart or pie chart comparing regions
+7. **"Compare this year vs last year"** → Create a bar chart with grouped bars
+
+### Visualization Best Practices:
+
+- **Always provide the data table first**, then add the visualization as an enhancement
+- **Explain what the visualization shows** in your response
+- **Use clear, descriptive titles** for charts
+- **Choose chart types that best represent the data** - don't force inappropriate visualizations
+- **Respect user preferences** - if they explicitly ask for "just the table" or "no chart", don't create one
+
+Remember: The goal is to enhance understanding through visual representation when it adds value. Use your judgment to determine when a visualization would be helpful versus when a table is sufficient.
 """
         
         logger.debug(f"SystemPrompt: Built prompt for user '{user.id}' with context")

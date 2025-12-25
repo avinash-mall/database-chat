@@ -15,7 +15,7 @@ Configuration:
     Set environment variables or create a .env file:
     - ORACLE_USER, ORACLE_PASSWORD, ORACLE_DSN
     - OLLAMA_MODEL, OLLAMA_HOST
-    - CHROMA_COLLECTION, CHROMA_PERSIST_DIR
+    - MILVUS_HOST, MILVUS_PORT, MILVUS_COLLECTION
     - VANNA_HOST, VANNA_PORT
     - LDAP_HOST, LDAP_PORT, LDAP_BASE_DN, etc.
 
@@ -30,7 +30,7 @@ For production deployments, consider:
     - Setting up proper CORS and security headers
 """
 
-from .config import config, AppConfig, OracleConfig, OllamaConfig, OpenAIConfig, ChromaConfig, ServerConfig, LdapConfig
+from .config import config, AppConfig, OracleConfig, OllamaConfig, OpenAIConfig, MilvusConfig, ServerConfig, LdapConfig
 from .main import create_agent, main, HybridUserResolver
 
 __all__ = [
@@ -40,7 +40,7 @@ __all__ = [
     "OracleConfig", 
     "OllamaConfig",
     "OpenAIConfig",
-    "ChromaConfig",
+    "MilvusConfig",
     "ServerConfig",
     "LdapConfig",
     # Main application

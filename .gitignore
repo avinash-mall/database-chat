@@ -24,4 +24,7 @@ venv/
 
 # Docker data
 chroma_db/
+milvus_data/
+etcd_data/
+minio_data/
 
