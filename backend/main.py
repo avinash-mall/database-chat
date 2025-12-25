@@ -23,6 +23,8 @@ from vanna import Agent, AgentConfig
 from vanna.core.registry import ToolRegistry
 from vanna.core.user import UserResolver, User, RequestContext
 from vanna.tools import RunSqlTool, VisualizeDataTool
+from vanna.tools.file_system import WriteFileTool
+from vanna.integrations.local import LocalFileSystem
 from vanna.tools.agent_memory import (
     SaveQuestionToolArgsTool,
     SearchSavedCorrectToolUsesTool,
@@ -495,7 +497,21 @@ def create_agent() -> Agent:
     tools.register_local_tool(SaveQuestionToolArgsTool(), access_groups=['admin', 'superuser'])
     tools.register_local_tool(SearchSavedCorrectToolUsesTool(), access_groups=['admin', 'superuser', 'user'])
     tools.register_local_tool(SaveTextMemoryTool(), access_groups=['admin', 'superuser', 'user'])
-    tools.register_local_tool(VisualizeDataTool(), access_groups=['admin', 'superuser', 'user'])
+    
+    # Create a shared LocalFileSystem instance for both VisualizeDataTool and WriteFileTool
+    # This ensures both tools can access the same files
+    # LocalFileSystem doesn't take parameters - it uses the current working directory
+    file_system = LocalFileSystem()
+    
+    # Create VisualizeDataTool with the shared file system
+    # According to Vanna docs: VisualizeDataTool(file_system=LocalFileSystem())
+    visualize_tool = VisualizeDataTool(file_system=file_system)
+    tools.register_local_tool(visualize_tool, access_groups=['admin', 'superuser', 'user'])
+    
+    # Register WriteFileTool with the same file system
+    # This allows the agent to save CSV files that VisualizeDataTool can read
+    write_file_tool = WriteFileTool(file_system=file_system)
+    tools.register_local_tool(write_file_tool, access_groups=['admin', 'superuser', 'user'])
     
     # Create agent configuration
     agent_config = AgentConfig(

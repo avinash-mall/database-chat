@@ -40,3 +40,14 @@ sn: User
 uid: sarah
 userPassword: sarah123
 mail: sarah@vanna.ai
+
+
+dn: cn=alana,ou=users,dc=vanna,dc=ai
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: alana
+sn: User
+uid: alana
+userPassword: alana123
+mail: AWALSH@vanna.ai

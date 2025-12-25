@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from vanna.core.tool import Tool, ToolContext, ToolResult
 from vanna.components import DataFrameComponent
+from vanna.capabilities.sql_runner.models import RunSqlToolArgs
 
 from .rls_service import RowLevelSecurityService
 
@@ -101,13 +102,14 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
             self._user_filter_cache[user_id] = self.rls_service.get_user_filter_values(user_id)
         return self._user_filter_cache[user_id]
     
-    def _execute_query(self, sql: str, bind_params: dict = None):
+    async def _execute_query(self, sql: str, bind_params: dict = None, context = None):
         """
         Execute a SQL query using the sql_runner.
         
         Args:
             sql: The SQL query to execute
             bind_params: Optional bind parameters for the query
+            context: Optional ToolContext to pass to run_sql
             
         Returns:
             Query results (typically a pandas DataFrame)
@@ -150,7 +152,13 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
                 raise RuntimeError(f"Database error: {e}")
         else:
             # No bind params, use the standard runner
-            return self.sql_runner.run_sql(sql)
+            # run_sql requires RunSqlToolArgs and ToolContext, and is async
+            if context is None:
+                raise ValueError("context is required for OracleRunner.run_sql()")
+            
+            sql_args = RunSqlToolArgs(sql=sql)
+            result = await self.sql_runner.run_sql(sql_args, context)
+            return result
     
     async def execute(self, context: ToolContext, args: SecureSqlArgs) -> ToolResult:
         """
@@ -173,7 +181,7 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
             # Check if user is privileged
             if self._is_privileged_user(user):
                 logger.info(f"SecureRunSqlTool: User '{user.id}' is privileged, no RLS applied")
-                result_df = self._execute_query(original_sql)
+                result_df = await self._execute_query(original_sql, None, context)
             else:
                 # User is NORMALUSER - apply RLS filtering
                 logger.info(f"SecureRunSqlTool: User '{user.id}' requires RLS filtering")
@@ -189,12 +197,12 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
                     )
                     
                     logger.info(f"SecureRunSqlTool: RLS applied, modified query: {modified_sql[:200]}...")
-                    result_df = self._execute_query(modified_sql, bind_params)
+                    result_df = await self._execute_query(modified_sql, bind_params, context)
                 else:
                     # No filter values - execute original query
                     # This could mean the user has NULL values in filter columns
                     logger.warning(f"SecureRunSqlTool: No filter values for user '{user.id}', executing original query")
-                    result_df = self._execute_query(original_sql)
+                    result_df = await self._execute_query(original_sql, None, context)
             
             # Build result
             row_count = len(result_df) if hasattr(result_df, '__len__') else 0

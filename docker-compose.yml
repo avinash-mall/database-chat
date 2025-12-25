@@ -10,6 +10,7 @@ services:
       - .env
     volumes:
       - chroma_data:/app/chroma_db
+      - ./.cursor:/app/.cursor
     networks:
       - vanna-network
     extra_hosts:
