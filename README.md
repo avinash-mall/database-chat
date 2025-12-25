@@ -9,7 +9,7 @@ A natural language interface for querying Oracle databases using the Vanna AI fr
 - **Role-Based Access Control**: Admin, superuser, and normaluser groups with different permissions
 - **Row-Level Security (RLS)**: Automatic data filtering for NORMALUSER based on AI_USERS identity columns
 - **User Context Awareness**: LLM automatically knows who you are - no need to identify yourself
-- **User Data Discovery**: Automatic discovery of tables containing your identity data
+- **Schema Training**: Automatic database schema discovery and LLM context injection at startup
 - **Multiple LLM Support**: Choose between Ollama (local) or OpenAI (cloud) for inference
 - **Persistent Memory**: ChromaDB-based agent memory for context retention
 - **Modern Web UI**: Custom-built chat interface with authentication
@@ -161,7 +161,7 @@ Row-Level Security automatically filters query results for NORMALUSER based on t
 
 1. **Dynamic Column Discovery**: The system reads AI_USERS table schema to find identity columns (any column except USERNAME, IS_ADMIN, IS_SUPERUSER, IS_NORMALUSER)
 2. **Automatic Filtering**: When a NORMALUSER runs a query, WHERE clauses are injected to filter by matching columns
-3. **Table Discovery**: The `discover_my_tables` tool finds tables containing user identity columns
+3. **Schema Training**: At startup, the system loads all table schemas (columns, relationships) into the LLM context
 4. **User Context**: The LLM knows who the user is and can query "my data" without asking for ID
 
 ### Example
@@ -403,7 +403,7 @@ database-chat/
 │   ├── templates.py              # Custom login page HTML template
 │   ├── rls_service.py            # Row-Level Security service
 │   ├── secure_sql_tool.py        # RLS-aware SQL execution tool
-│   ├── discover_tables_tool.py   # User data discovery tool
+│   ├── schema_trainer.py         # Database schema training for LLM context
 │   └── system_prompt_builder.py  # User-aware system prompts
 ├── assets/                       # Frontend assets
 │   ├── base.html                 # Base HTML template
@@ -470,7 +470,6 @@ The Vanna Agent provides several tools based on user permissions:
 **All Users (admin, superuser, normaluser):**
 
 - `run_sql` - Execute SQL queries on Oracle database (RLS applied for normaluser)
-- `discover_my_tables` - Discover tables containing user identity columns
 - `search_saved_correct_tool_uses` - Search past successful queries
 - `save_text_memory` - Save text-based memories
 - `visualize_data` - Create visualizations from query results
@@ -479,14 +478,25 @@ The Vanna Agent provides several tools based on user permissions:
 
 - `save_question_tool_args` - Save training examples for query improvement
 
+### Schema Training
+
+At startup, the application automatically:
+1. Queries Oracle metadata (USER_TABLES, USER_TAB_COLUMNS, USER_CONSTRAINTS)
+2. Generates DDL-like documentation for each table
+3. Discovers foreign key relationships between tables
+4. Injects schema summary into the LLM system prompt
+
+This allows the LLM to understand table structures and relationships without manual training.
+
 ### User Context in LLM
 
 The LLM automatically knows:
 - User's username, email, and groups
 - User's identity column values (EMPLOYEE_ID, EMAIL, etc.)
 - Access level (full access or RLS-restricted)
+- Full database schema with table relationships
 
-This allows natural queries like "show me my employee details" without needing to specify user ID.
+This allows natural queries like "show me my employee details" or "is my salary good for my job?" without needing to specify user ID or know table names.
 
 ## Security Considerations
 

@@ -50,7 +50,7 @@ from .config import config
 from .rls_service import RowLevelSecurityService, RLSConfig
 from .secure_sql_tool import SecureRunSqlTool
 from .system_prompt_builder import UserAwareSystemPromptBuilder
-from .discover_tables_tool import DiscoverUserTablesTool
+from .schema_trainer import SchemaTrainer
 
 
 # =============================================================================
@@ -475,14 +475,23 @@ def create_agent() -> Agent:
     # Configure user resolver (LDAP auth + Database role resolution)
     user_resolver = HybridUserResolver(ldap_config=config.ldap, oracle_config=config.oracle)
     
+    # ==========================================================================
+    # Schema Training (Vanna Native Approach)
+    # ==========================================================================
+    # Train the agent with database schema information
+    # This provides the LLM with table/column/relationship context
+    schema_trainer = SchemaTrainer(
+        oracle_config=config.oracle,
+        agent_memory=agent_memory
+    )
+    schema_trainer.train_schema()
+    schema_summary = schema_trainer.get_schema_summary()
+    print(f"Schema Training: Loaded {len(schema_trainer._schema_info)} tables/views")
+    
     # Set up the tool registry with access controls
     # Roles from AI_USERS table: admin, superuser, user
     tools = ToolRegistry()
     tools.register_local_tool(db_tool, access_groups=['admin', 'superuser', 'user'])
-    tools.register_local_tool(
-        DiscoverUserTablesTool(rls_service=rls_service, oracle_config=config.oracle),
-        access_groups=['admin', 'superuser', 'user']
-    )
     tools.register_local_tool(SaveQuestionToolArgsTool(), access_groups=['admin', 'superuser'])
     tools.register_local_tool(SearchSavedCorrectToolUsesTool(), access_groups=['admin', 'superuser', 'user'])
     tools.register_local_tool(SaveTextMemoryTool(), access_groups=['admin', 'superuser', 'user'])
@@ -494,11 +503,12 @@ def create_agent() -> Agent:
     )
     
     # Create user-aware system prompt builder
-    # This injects user identity and RLS filter values into the LLM prompt
+    # This injects user identity, RLS filter values, AND schema info into the LLM prompt
     system_prompt_builder = UserAwareSystemPromptBuilder(
         rls_service=rls_service,
         company_name="Database Chat",
-        include_rls_values=True
+        include_rls_values=True,
+        schema_summary=schema_summary
     )
     
     # Create and return the agent

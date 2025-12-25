@@ -36,7 +36,8 @@ class UserAwareSystemPromptBuilder(SystemPromptBuilder):
         self, 
         rls_service: RowLevelSecurityService,
         company_name: str = "Database Chat",
-        include_rls_values: bool = True
+        include_rls_values: bool = True,
+        schema_summary: str = None
     ):
         """
         Initialize the user-aware system prompt builder.
@@ -45,10 +46,12 @@ class UserAwareSystemPromptBuilder(SystemPromptBuilder):
             rls_service: The RLS service for fetching user filter values
             company_name: Company/application name for the prompt
             include_rls_values: Whether to include RLS filter values in prompt
+            schema_summary: Pre-generated schema summary to include in prompts
         """
         self.rls_service = rls_service
         self.company_name = company_name
         self.include_rls_values = include_rls_values
+        self.schema_summary = schema_summary
         self._default_builder = DefaultSystemPromptBuilder()
         
         # Cache for user filter values
@@ -93,33 +96,48 @@ class UserAwareSystemPromptBuilder(SystemPromptBuilder):
         # Build user context section
         user_context = self._build_user_context(user)
         
+        # Build schema context if available
+        schema_context = ""
+        if self.schema_summary:
+            schema_context = f"""
+## Database Schema
+
+The following database tables and relationships are available:
+
+{self.schema_summary}
+"""
+        
         # Combine prompts
         full_prompt = f"""{base_prompt}
 
 ## Current User Context
 
 {user_context}
-
-## Important Instructions for User Context
+{schema_context}
+## Important Instructions for User Queries
 
 When the user asks about "my data", "my details", "my records", "my information", or uses phrases like "give me my...", "show me my...", "what are my...":
 
 1. **You already know who they are** - Use the user information provided above
 2. **Do NOT ask for their user ID or email** - You have this information
-3. **If you don't know which table to query**, use the `discover_my_tables` tool first to find tables containing the user's identity columns
-4. **Use the appropriate identifier columns** when querying their data
+3. **Use the schema information above** to understand available tables and relationships
+4. **Use JOINs** when you need related data (e.g., JOIN EMPLOYEES with JOBS for salary ranges)
 
-### Recommended Workflow for "My Data" Queries:
+### Query Guidelines:
 
-1. First, call `discover_my_tables` to find tables/views/materialized views with user identity columns
-2. Review the discovered tables and select the most relevant one(s) for the user's question
-3. Use `run_sql` to query the selected table(s) - row-level security will automatically filter results
+- Row-level security (RLS) automatically filters results for regular users based on their identity columns
+- Use the foreign key relationships shown above to JOIN tables correctly
+- For salary comparisons, the JOBS table has MIN_SALARY and MAX_SALARY columns
+- Always use the user's identity columns (EMPLOYEE_ID, EMAIL) when querying user-specific data
 
-### Identity Column Filtering:
-- If querying a table that has an EMPLOYEE_ID column, filter by the user's EMPLOYEE_ID
-- If querying a table that has an EMAIL column, filter by the user's EMAIL
-- If querying a table that has a PERSON_ID column, filter by the user's PERSON_ID
-- If querying a table that has a USERNAME column, filter by the user's USERNAME
+### Example: "Is my salary good for my job?"
+Query approach:
+```sql
+SELECT e.SALARY, j.MIN_SALARY, j.MAX_SALARY, j.JOB_TITLE
+FROM EMPLOYEES e
+JOIN JOBS j ON e.JOB_ID = j.JOB_ID
+WHERE e.EMPLOYEE_ID = <user's employee_id>
+```
 """
         
         logger.debug(f"SystemPrompt: Built prompt for user '{user.id}' with context")
