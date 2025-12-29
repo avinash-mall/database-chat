@@ -1,0 +1,53 @@
+dn: ou=users,dc=vanna,dc=ai
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=vanna,dc=ai
+objectClass: organizationalUnit
+ou: groups
+
+dn: cn=admin,ou=groups,dc=vanna,dc=ai
+objectClass: groupOfNames
+cn: admin
+member: cn=avinash,ou=users,dc=vanna,dc=ai
+
+dn: cn=avinash,ou=users,dc=vanna,dc=ai
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: avinash
+sn: User
+uid: avinash
+userPassword: avinash123
+mail: avinash@vanna.ai
+
+dn: cn=testuser,ou=users,dc=vanna,dc=ai
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: testuser
+sn: User
+uid: testuser
+userPassword: testuser
+mail: testuser@vanna.ai
+
+dn: cn=Sarah,ou=users,dc=vanna,dc=ai
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: Sarah
+sn: User
+uid: sarah
+userPassword: sarah123
+mail: sarah@vanna.ai
+
+
+dn: cn=alana,ou=users,dc=vanna,dc=ai
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: alana
+sn: User
+uid: alana
+userPassword: alana123
+mail: AWALSH@vanna.ai
