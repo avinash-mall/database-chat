@@ -485,11 +485,13 @@ def create_agent() -> Agent:
     # This provides the LLM with table/column/relationship context
     schema_trainer = SchemaTrainer(
         oracle_config=config.oracle,
-        agent_memory=agent_memory
+        agent_memory=agent_memory,
+        llm_service=llm,
+        openai_config=config.openai
     )
-    schema_trainer.train_schema()
-    schema_summary = schema_trainer.get_schema_summary()
-    print(f"Schema Training: Loaded {len(schema_trainer._schema_info)} tables/views")
+    
+    # We do NOT run train_schema() here automatically anymore
+    # Use the /gather command in the UI to trigger training
     
     # Set up the tool registry with access controls
     # Roles from AI_USERS table: admin, superuser, user
@@ -499,18 +501,23 @@ def create_agent() -> Agent:
     tools.register_local_tool(SearchSavedCorrectToolUsesTool(), access_groups=['admin', 'superuser', 'user'])
     tools.register_local_tool(SaveTextMemoryTool(), access_groups=['admin', 'superuser', 'user'])
     
+    # Register manual schema training tool (/gather)
+    from .gather_schema_tool import GatherSchemaTool
+    tools.register_local_tool(GatherSchemaTool(schema_trainer), access_groups=['admin', 'superuser'])
+    
+    # Register memory cleanup tool (/cleanup)
+    from .cleanup_memory_tool import CleanupMemoryTool
+    tools.register_local_tool(CleanupMemoryTool(config.milvus), access_groups=['admin', 'superuser'])
+    
     # Create a shared LocalFileSystem instance for both VisualizeDataTool and WriteFileTool
     # This ensures both tools can access the same files
-    # LocalFileSystem doesn't take parameters - it uses the current working directory
     file_system = LocalFileSystem()
     
     # Create VisualizeDataTool with the shared file system
-    # According to Vanna docs: VisualizeDataTool(file_system=LocalFileSystem())
     visualize_tool = VisualizeDataTool(file_system=file_system)
     tools.register_local_tool(visualize_tool, access_groups=['admin', 'superuser', 'user'])
     
     # Register WriteFileTool with the same file system
-    # This allows the agent to save CSV files that VisualizeDataTool can read
     write_file_tool = WriteFileTool(file_system=file_system)
     tools.register_local_tool(write_file_tool, access_groups=['admin', 'superuser', 'user'])
     
@@ -520,13 +527,14 @@ def create_agent() -> Agent:
     )
     
     # Create user-aware system prompt builder
-    # This injects user identity, RLS filter values, AND schema info into the LLM prompt
+    # This injects user identity and RLS filter values into the LLM prompt
+    # Schema information is retrieved via semantic search from agent memory when needed
     system_prompt_builder = UserAwareSystemPromptBuilder(
         rls_service=rls_service,
         company_name="Database Chat",
-        include_rls_values=True,
-        schema_summary=schema_summary
+        include_rls_values=True
     )
+    
     
     # Create and return the agent
     # Note: workflow_handler=None disables the default handler that shows "Admin View"

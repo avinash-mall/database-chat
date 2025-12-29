@@ -18,6 +18,11 @@ COPY requirements.txt ./
 # Install Python dependencies
 RUN pip install -r requirements.txt
 
+# Patch vanna MilvusAgentMemory to handle empty args_json in text memories
+RUN sed -i 's/\["\"\],  # args_json (empty for text memories)/\["\{\}"\],  # args_json (empty for text memories)/' /usr/local/lib/python3.11/site-packages/vanna/integrations/milvus/agent_memory.py && \
+    sed -i 's/json.loads(result.get("args_json", "{}"))/json.loads(result.get("args_json") or "{}")/' /usr/local/lib/python3.11/site-packages/vanna/integrations/milvus/agent_memory.py && \
+    sed -i 's/json.loads(hit.entity.get("args_json", "{}"))/json.loads(hit.entity.get("args_json") or "{}")/' /usr/local/lib/python3.11/site-packages/vanna/integrations/milvus/agent_memory.py
+
 # Copy backend application code
 COPY backend/ ./backend/
 

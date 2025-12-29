@@ -70,6 +70,7 @@ class OracleConfig:
     user: str
     password: str
     dsn: str
+    schema_name: str
     
     @classmethod
     def from_env(cls) -> "OracleConfig":
@@ -78,6 +79,7 @@ class OracleConfig:
             user=_require_env("ORACLE_USER"),
             password=_require_env("ORACLE_PASSWORD"),
             dsn=_require_env("ORACLE_DSN"),
+            schema_name=(_get_env("ORACLE_SCHEMA") or _get_env("SCHEMA_NAME") or os.getenv("ORACLE_USER") or "").upper()
         )
 
 
@@ -380,6 +382,12 @@ class AppConfig:
     @property
     def oracle_dsn(self) -> str:
         return self.oracle.dsn
+    
+    @property
+    def inference_provider(self) -> str:
+        """Get the inference provider from environment variable."""
+        return _get_env("INFERENCE_PROVIDER", "ollama").lower()
+    
     
     @property
     def ollama_model(self) -> str:
