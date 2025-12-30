@@ -7,6 +7,8 @@
 .vscode/
 *.swp
 *.swo
+.cursor
+.cursor/
 
 # OS
 .DS_Store
@@ -27,4 +29,4 @@ chroma_db/
 milvus_data/
 etcd_data/
 minio_data/
-
+ldap_seed/
