@@ -576,13 +576,13 @@ boxShadow: {
 - Map our Tailwind token system to Vanna variables
 - Example:
    ```css
-      vanna-chat {
-        --vanna-accent-primary-default: #0ea5e9; /* sky-500 */
-        --vanna-foreground-default: #0f172a;     /* slate-900 */
-        --vanna-background-root: #ffffff;
-        --vanna-chat-spacing: 1rem;               /* 16px */
-        --vanna-border-radius-lg: 0.75rem;       /* 12px */
-      }
+         vanna-chat {
+           --vanna-accent-primary-default: #0ea5e9; /* sky-500 */
+           --vanna-foreground-default: #0f172a;     /* slate-900 */
+           --vanna-background-root: #ffffff;
+           --vanna-chat-spacing: 1rem;               /* 16px */
+           --vanna-border-radius-lg: 0.75rem;       /* 12px */
+         }
    ```
 
 
@@ -1181,4 +1181,3 @@ Extend `backend/config.py` UITextConfig with:
 - `example_prompts_admin` (JSON array)
 - `example_prompts_user` (JSON array)
 - `session_default_name`
-- `export_formats` (JSON array)

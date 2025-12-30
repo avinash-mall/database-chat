@@ -95,6 +95,40 @@ class VannaFlaskServer(BaseVannaFlaskServer):
                     pass
                 abort(404)
         
+        # Serve generated files (images, CSVs) from current working directory
+        @app.route("/api/files/<filename>")
+        def serve_file(filename):
+            """Serve generated files (images, CSVs) from the working directory."""
+            from flask import send_from_directory, abort
+            import os
+            from pathlib import Path
+            
+            # Get current working directory where files are saved
+            cwd = Path(os.getcwd())
+            
+            # Security check: only allow certain file types
+            allowed_extensions = {'.png', '.jpg', '.jpeg', '.svg', '.csv', '.json'}
+            _, ext = os.path.splitext(filename)
+            if ext.lower() not in allowed_extensions:
+                abort(404)
+            
+            # Search for the file in cwd and immediate subdirectories
+            # First check root
+            filepath = cwd / filename
+            if filepath.exists() and filepath.is_file():
+                return send_from_directory(str(cwd), filename)
+            
+            # Then check subdirectories (one level deep)
+            for subdir in cwd.iterdir():
+                if subdir.is_dir():
+                    filepath = subdir / filename
+                    if filepath.exists() and filepath.is_file():
+                        return send_from_directory(str(subdir), filename)
+            
+            # File not found
+            print(f"File not found: {filename} in {cwd} or subdirectories")
+            abort(404)
+        
         # Enable CORS
         cors_config = self.config.get("cors", {})
         if cors_config.get("enabled", True):
@@ -541,15 +575,15 @@ def create_agent() -> Agent:
     
     
     # Create and return the agent
-    # Note: workflow_handler=None disables the default handler that shows "Admin View"
-    # message based on group membership
+    # Note: Temporarily re-enabled default workflow handler to fix text response streaming
+    # If "Admin View" messages reappear, we'll implement a custom handler
     agent = Agent(
         llm_service=llm,
         tool_registry=tools,
         user_resolver=user_resolver,
         agent_memory=agent_memory,
         config=agent_config,
-        workflow_handler=None,  # Disable default workflow handler
+        # workflow_handler=None,  # DISABLED: Testing default handler for text streaming
         system_prompt_builder=system_prompt_builder  # User-aware prompts
     )
     

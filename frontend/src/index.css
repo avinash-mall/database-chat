@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global styles */
+body {
+    @apply font-sans antialiased;
+    background: linear-gradient(to bottom, #e7e1cf, #ffffff);
+    min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-vanna-teal/50 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-vanna-teal;
+}
+
+/* Animation utilities */
+@keyframes pulse-slow {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.animate-pulse-slow {
+    animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-slide-in {
+    animation: slide-in 0.3s ease-out;
+}
+
+/* Loading spinner */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin-slow {
+    animation: spin 2s linear infinite;
+}
+
+/* Markdown content styling */
+.markdown-content {
+    @apply text-gray-800 leading-relaxed;
+}
+
+.markdown-content h1 {
+    @apply text-3xl font-bold mt-6 mb-4 font-serif;
+}
+
+.markdown-content h2 {
+    @apply text-2xl font-bold mt-5 mb-3 font-serif;
+}
+
+.markdown-content h3 {
+    @apply text-xl font-semibold mt-4 mb-2;
+}
+
+.markdown-content p {
+    @apply mb-4;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    @apply mb-4 ml-6;
+}
+
+.markdown-content li {
+    @apply mb-2;
+}
+
+.markdown-content code {
+    @apply bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.markdown-content pre {
+    @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto mb-4;
+}
+
+.markdown-content pre code {
+    @apply bg-transparent p-0;
+}
+
+.markdown-content a {
+    @apply text-vanna-teal hover:text-vanna-navy underline;
+}
+
+.markdown-content blockquote {
+    @apply border-l-4 border-vanna-teal pl-4 italic text-gray-600 mb-4;
+}
+
+.markdown-content table {
+    @apply w-full border-collapse mb-4;
+}
+
+.markdown-content th {
+    @apply bg-gray-100 border border-gray-300 px-4 py-2 text-left font-semibold;
+}
+
+.markdown-content td {
+    @apply border border-gray-300 px-4 py-2;
+}
