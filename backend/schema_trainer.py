@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Tables to exclude from training (system/internal tables)
 EXCLUDED_TABLES = {
+    'AI_USERS',
     'CHAINED_ROWS', 
     'PLAN_TABLE',
     'MVIEW$_ADV_WORKLOAD',
@@ -330,13 +331,17 @@ class SchemaTrainer:
             if hasattr(args_schema_class, 'model_fields'):
                 fields = list(args_schema_class.model_fields.keys())
             
+            # Truncate text to avoid Milvus limits (max 2000-3000 chars usually safe)
+            MAX_TEXT_LENGTH = 2000
+            truncated_text = text[:MAX_TEXT_LENGTH] if text and len(text) > MAX_TEXT_LENGTH else text
+            
             if 'text' in fields:
-                args = args_schema_class(text=text, metadata=metadata or {})
+                args = args_schema_class(text=truncated_text, metadata=metadata or {})
             elif 'content' in fields:
-                args = args_schema_class(content=text, metadata=metadata or {})
+                args = args_schema_class(content=truncated_text, metadata=metadata or {})
             else:
                 first_field = fields[0] if fields else 'content'
-                args = args_schema_class(**{first_field: text, "metadata": metadata or {}})
+                args = args_schema_class(**{first_field: truncated_text, "metadata": metadata or {}})
             
             # Handle async execution
             import asyncio

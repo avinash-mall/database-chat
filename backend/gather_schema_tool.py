@@ -37,9 +37,23 @@ class GatherSchemaTool(Tool):
     
     async def execute(self, context: ToolContext, args: GatherSchemaArgs) -> ToolResult:
         """Execute the schema gathering process."""
-        user = context.user if context else None
+        user = context.user
         
-        logger.info(f"Schema training triggered by user: {user.id if user else 'unknown'}")
+        # Check permissions
+        if not user:
+             return ToolResult(
+                success=False,
+                result_for_llm="Error: No user found in context."
+            )
+            
+        user_groups = {g.lower() for g in user.group_memberships or []}
+        if 'admin' not in user_groups and 'superuser' not in user_groups:
+            return ToolResult(
+                success=False,
+                result_for_llm="Error: Only admin or superuser users can gather schema information."
+            )
+            
+        logger.info(f"Schema training triggered by user: {user.id}")
         
         try:
             items_trained = self.schema_trainer.train_schema()

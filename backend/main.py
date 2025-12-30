@@ -509,6 +509,10 @@ def create_agent() -> Agent:
     from .cleanup_memory_tool import CleanupMemoryTool
     tools.register_local_tool(CleanupMemoryTool(config.milvus), access_groups=['admin', 'superuser'])
     
+    # Register schema listing tool
+    from .discover_tables_tool import ListAllTablesTool
+    tools.register_local_tool(ListAllTablesTool(config.oracle), access_groups=['admin', 'superuser', 'user'])
+    
     # Create a shared LocalFileSystem instance for both VisualizeDataTool and WriteFileTool
     # This ensures both tools can access the same files
     file_system = LocalFileSystem()
