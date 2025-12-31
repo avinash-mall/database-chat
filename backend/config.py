@@ -388,19 +388,15 @@ class AppConfig:
         """Get the inference provider from environment variable."""
         return _get_env("INFERENCE_PROVIDER", "ollama").lower()
     
-    
     @property
     def ollama_model(self) -> str:
+        """Get the Ollama model name."""
         return self.ollama.model
     
     @property
     def ollama_host(self) -> str:
+        """Get the Ollama host URL."""
         return self.ollama.host
-    
-    @property
-    def inference_provider(self) -> str:
-        """Get the inference provider from environment variable."""
-        return _get_env("INFERENCE_PROVIDER", "ollama").lower()
 
 
 def load_dotenv_if_available():

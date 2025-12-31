@@ -1,12 +1,27 @@
 """
-Custom HTML templates for LDAP authentication.
+HTML Templates for Database Chat Application.
+
+This module provides template generation for the LDAP authentication UI.
+It loads base templates from the assets directory and injects dynamic
+content including UI text strings and API endpoint information.
 """
 
 from pathlib import Path
+from typing import Optional, Any
 
 
 def _load_template_file(filename: str) -> str:
-    """Load a template file from the assets directory."""
+    """Load a template file from the assets directory.
+    
+    Args:
+        filename: Name of the file to load (e.g., 'base.html', 'styles.css').
+        
+    Returns:
+        Contents of the template file.
+        
+    Raises:
+        FileNotFoundError: If the template file does not exist.
+    """
     assets_dir = Path(__file__).parent.parent / "assets"
     
     if filename.endswith('.css'):
@@ -26,9 +41,21 @@ def _load_template_file(filename: str) -> str:
 def get_ldap_login_html(
     api_base_url: str = "",
     show_api_endpoints: bool = True,
-    ui_text = None,
+    ui_text: Optional[Any] = None,
 ) -> str:
-    """Generate index HTML with LDAP username/password login."""
+    """Generate the LDAP login page HTML.
+    
+    Loads base HTML, CSS, and JavaScript templates from the assets directory
+    and injects dynamic UI text and configuration.
+    
+    Args:
+        api_base_url: Base URL for API endpoints display.
+        show_api_endpoints: Whether to show the API endpoints section.
+        ui_text: UI text configuration object with customizable strings.
+        
+    Returns:
+        Complete HTML page as a string.
+    """
     # Load template files
     base_html = _load_template_file("base.html")
     styles_css = _load_template_file("styles.css")
@@ -82,8 +109,21 @@ def get_ldap_login_html(
     return html
 
 
-def _build_api_endpoints_section(api_base_url: str, show_api_endpoints: bool, ui_text) -> str:
-    """Build the API endpoints section HTML."""
+def _build_api_endpoints_section(
+    api_base_url: str, 
+    show_api_endpoints: bool, 
+    ui_text: Optional[Any]
+) -> str:
+    """Build the API endpoints section HTML.
+    
+    Args:
+        api_base_url: Base URL prefix for the API endpoints.
+        show_api_endpoints: If False, returns empty string.
+        ui_text: UI text configuration for labels.
+        
+    Returns:
+        HTML string for the API endpoints section.
+    """
     if not show_api_endpoints:
         return ''
     

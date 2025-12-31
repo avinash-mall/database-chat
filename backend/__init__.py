@@ -1,5 +1,5 @@
 """
-Vanna Oracle Database Agent Application
+Vanna Oracle Database Agent Application.
 
 This package contains a complete example application that connects Vanna to an
 Oracle database running on localhost, enabling natural language queries against
@@ -19,32 +19,43 @@ Configuration:
     - VANNA_HOST, VANNA_PORT
     - LDAP_HOST, LDAP_PORT, LDAP_BASE_DN, etc.
 
-Components:
+Modules:
     - main.py: Application entry point
     - config.py: Configuration management with env var support
-    - create_agent(): Factory function to create configured agent
-    - HybridUserResolver: LDAP auth + Database role resolution
-
-For production deployments, consider:
-    - Using environment variables for sensitive credentials
-    - Setting up proper CORS and security headers
+    - server.py: Custom Flask server with LDAP authentication
+    - auth.py: Hybrid LDAP + database role authentication
+    - agent_factory.py: Agent creation and configuration
 """
 
-from .config import config, AppConfig, OracleConfig, OllamaConfig, OpenAIConfig, MilvusConfig, ServerConfig, LdapConfig
-from .main import create_agent, main, HybridUserResolver
+from .config import (
+    config,
+    AppConfig,
+    OracleConfig,
+    OllamaConfig,
+    OpenAIConfig,
+    MilvusConfig,
+    ServerConfig,
+    LdapConfig,
+)
+from .main import main
+from .server import VannaFlaskServer
+from .auth import HybridUserResolver
+from .agent_factory import create_agent
 
 __all__ = [
     # Configuration
     "config",
     "AppConfig",
-    "OracleConfig", 
+    "OracleConfig",
     "OllamaConfig",
     "OpenAIConfig",
     "MilvusConfig",
     "ServerConfig",
     "LdapConfig",
     # Main application
-    "create_agent",
-    "main", 
+    "main",
+    "VannaFlaskServer",
     "HybridUserResolver",
+    "create_agent",
 ]
+
