@@ -9,12 +9,15 @@ For ADMIN and SUPERUSER roles, queries are executed without filtering.
 """
 
 import logging
+import uuid
 from typing import Type, List, Optional, Dict, Any
 from pydantic import BaseModel, Field
+import pandas as pd
 
 from vanna.core.tool import Tool, ToolContext, ToolResult
-from vanna.components import DataFrameComponent
+from vanna.components import UiComponent, DataFrameComponent, SimpleTextComponent
 from vanna.capabilities.sql_runner.models import RunSqlToolArgs
+from vanna.integrations.local import LocalFileSystem
 
 from .rls_service import RowLevelSecurityService
 
@@ -52,6 +55,7 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
         """
         self.sql_runner = sql_runner
         self.rls_service = rls_service
+        self.file_system = LocalFileSystem()
         # Cache for user filter values to avoid repeated DB queries in same session
         self._user_filter_cache: Dict[str, Any] = {}
     
@@ -139,7 +143,6 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
                 connection.close()
                 
                 # Convert to pandas DataFrame
-                import pandas as pd
                 if columns and rows:
                     return pd.DataFrame(rows, columns=columns)
                 elif columns:
@@ -207,6 +210,9 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
             # Build result
             row_count = len(result_df) if hasattr(result_df, '__len__') else 0
             
+            # Generate unique CSV filename
+            filename = f"query_result_{uuid.uuid4().hex[:8]}.csv"
+            
             # Create result summary for LLM
             if row_count == 0:
                 result_text = "Query executed successfully. No rows returned."
@@ -217,13 +223,49 @@ class SecureRunSqlTool(Tool[SecureSqlArgs]):
                 else:
                     result_text += f"\n\nFirst 10 rows:\n{result_df.head(10).to_string()}"
             
+            # Save CSV file and create UI components
+            ui_component = None
+            if row_count > 0:
+                try:
+                    # Save DataFrame to CSV
+                    csv_content = result_df.to_csv(index=False)
+                    await self.file_system.write_file(filename, csv_content, context, overwrite=True)
+                    logger.info(f"SecureRunSqlTool: Saved query results to {filename}")
+                    
+                    # Create DataFrameComponent for rich table display
+                    dataframe_component = DataFrameComponent.from_records(
+                        records=result_df.to_dict('records'),
+                        title="Query Results"
+                    )
+                    
+                    # Create SimpleTextComponent with summary
+                    simple_component = SimpleTextComponent(
+                        text=result_text
+                    )
+                    
+                    # Wrap in UiComponent
+                    ui_component = UiComponent(
+                        rich_component=dataframe_component,
+                        simple_component=simple_component
+                    )
+                    
+                    # Update result_for_llm with CSV filename and visualization instructions
+                    result_text += f"\n\nResults saved to file: {filename}"
+                    result_text += f"\n\nIMPORTANT: FOR VISUALIZE_DATA USE FILENAME: {filename}"
+                    
+                except Exception as e:
+                    logger.warning(f"SecureRunSqlTool: Failed to save CSV or create UI components: {e}")
+                    # Continue without UI components if there's an error
+            
             return ToolResult(
                 success=True,
                 result_for_llm=result_text,
+                ui_component=ui_component,
                 metadata={
                     "row_count": row_count,
                     "rls_applied": not self._is_privileged_user(user),
-                    "user_id": user.id
+                    "user_id": user.id,
+                    "csv_filename": filename if row_count > 0 else None
                 }
             )
             
