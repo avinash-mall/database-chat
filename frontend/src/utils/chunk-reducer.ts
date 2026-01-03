@@ -123,7 +123,6 @@ export class ChunkReducer {
                 // 2. chunk.content
                 // 3. chunk.data.content (nested structure)
                 const textContent = chunk.text || chunk.content || chunk.data?.content || '';
-                console.log('[CHUNK-REDUCER] Text content length:', textContent.length);
                 if (textContent) {
                     this.appendText(textContent);
                 }
@@ -132,7 +131,6 @@ export class ChunkReducer {
             case 'code':
             case 'sql':
                 // Code content
-                console.log('[CHUNK-REDUCER] Adding code block');
                 this.messageBuffer.content!.push({
                     type: 'code',
                     code: chunk.code || chunk.content || '',
@@ -143,7 +141,6 @@ export class ChunkReducer {
             case 'dataframe':
             case 'table':
                 // Table content
-                console.log('[CHUNK-REDUCER] Adding table');
                 this.messageBuffer.content!.push({
                     type: 'dataframe',
                     data: chunk.data || [],
@@ -153,39 +150,17 @@ export class ChunkReducer {
 
             case 'plotly':
             case 'chart':
-                // Chart content
-                // Vanna sends: {type: 'plotly', data: [...], layout: {...}}
-                // or nested: {type: 'plotly', data: {data: [...], layout: {...}}}
-                console.log('[CHUNK-REDUCER] ========== PLOTLY CHART PROCESSING ==========');
-                console.log('[CHUNK-REDUCER] Full chunk:', JSON.stringify(chunk, null, 2));
-                console.log('[CHUNK-REDUCER] chunk.data type:', typeof chunk.data);
-                console.log('[CHUNK-REDUCER] chunk.data is array?', Array.isArray(chunk.data));
-                console.log('[CHUNK-REDUCER] chunk.data:', chunk.data);
-                console.log('[CHUNK-REDUCER] chunk.layout:', chunk.layout);
-
-                // Check if data is nested (component wrapper)
+                // Chart content - handles both flat and nested formats:
+                // Flat: {type: 'plotly', data: [...], layout: {...}}
+                // Nested: {type: 'plotly', data: {data: [...], layout: {...}}}
                 let plotlyData = chunk.data;
                 let plotlyLayout = chunk.layout;
 
-                // If chunk.data is an object with its own data/layout, unwrap it
-                if (plotlyData && typeof plotlyData === 'object' && 'data' in plotlyData) {
-                    console.log('[CHUNK-REDUCER] 🔧 Unwrapping nested plotly structure');
-                    console.log('[CHUNK-REDUCER] Before unwrap - plotlyData:', plotlyData);
-                    console.log('[CHUNK-REDUCER] Before unwrap - plotlyData.data:', plotlyData.data);
-                    console.log('[CHUNK-REDUCER] Before unwrap - plotlyData.layout:', plotlyData.layout);
-
+                // Unwrap nested structure if data contains its own data/layout
+                if (plotlyData && typeof plotlyData === 'object' && !Array.isArray(plotlyData) && 'data' in plotlyData) {
                     plotlyLayout = plotlyData.layout || plotlyLayout;
                     plotlyData = plotlyData.data;
-
-                    console.log('[CHUNK-REDUCER] After unwrap - plotlyData:', plotlyData);
-                    console.log('[CHUNK-REDUCER] After unwrap - plotlyLayout:', plotlyLayout);
-                } else {
-                    console.log('[CHUNK-REDUCER] ℹ️ No unwrapping needed - data is already in correct format');
                 }
-
-                console.log('[CHUNK-REDUCER] Final plotlyData to be stored:', plotlyData);
-                console.log('[CHUNK-REDUCER] Final plotlyLayout to be stored:', plotlyLayout);
-                console.log('[CHUNK-REDUCER] ========== END PLOTLY PROCESSING ==========');
 
                 this.messageBuffer.content!.push({
                     type: 'plotly',
@@ -195,33 +170,26 @@ export class ChunkReducer {
                 break;
 
             case 'tool_call':
-                console.log('[CHUNK-REDUCER] Tool call');
                 this.handleVanna2ToolCall(chunk);
                 break;
 
             case 'tool_result':
-                console.log('[CHUNK-REDUCER] Tool result');
                 this.handleVanna2ToolResult(chunk);
                 break;
 
             case 'thinking':
-                console.log('[CHUNK-REDUCER] Thinking step');
                 this.handleThinking(chunk);
                 break;
 
             case 'error':
-                console.log('[CHUNK-REDUCER] Error message');
                 this.appendText(`\n\n⚠️ Error: ${chunk.description || chunk.content || 'Unknown error'}\n`);
                 break;
 
             default:
-                console.log('[CHUNK-REDUCER] Unknown component type, checking for text/content');
                 // Unknown component type - check if it has text content
                 if (chunk.text || chunk.content) {
-                    console.log('[CHUNK-REDUCER] Found text in unknown type, appending');
                     this.appendText(chunk.text || chunk.content || '');
                 } else {
-                    console.warn('[CHUNK-REDUCER] Storing unknown component as raw:', componentType);
                     // Store as unknown for debugging
                     this.messageBuffer.content!.push({
                         type: 'unknown',
@@ -233,7 +201,6 @@ export class ChunkReducer {
 
         // Process children recursively
         if (chunk.children && Array.isArray(chunk.children)) {
-            console.log('[CHUNK-REDUCER] Processing', chunk.children.length, 'children');
             chunk.children.forEach(child => this.processVanna2Component(child as ChatStreamChunk));
         }
     }
